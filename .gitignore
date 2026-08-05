@@ -1,0 +1,35 @@
+# ── Build artifacts ──────────────────────────────
+bin/
+build/bin/
+*.exe
+*.log
+
+# ── Frontend dependencies and output ────────────
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# ── Task / tooling cache ─────────────────────────
+.task/
+.wails/
+
+# ── Local databases and backups ──────────────────
+# The real note DB lives in %APPDATA%\sharknote, never in the repo.
+*.db
+*.db-wal
+*.db-shm
+*.db.bak
+*.db.corrupt-*
+
+# ── Editors and OS junk ──────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Environment / secrets ────────────────────────
+.env
+.env.*
+!.env.example
