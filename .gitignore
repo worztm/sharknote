@@ -33,3 +33,6 @@ desktop.ini
 .env
 .env.*
 !.env.example
+# Website
+website/node_modules/
+website/dist/
