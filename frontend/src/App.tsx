@@ -200,6 +200,20 @@ export default function App() {
     );
   }, []);
 
+  // Names of note tabs follow the notes list. Without this, a tab opened
+  // right after an import could keep a placeholder title (the callback that
+  // opened it ran before the fresh list arrived), and imported or renamed
+  // notes would show “Untitled” until the user happened to edit them.
+  useEffect(() => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.kind !== "note") return t;
+        const fresh = notes.find((n) => n.id === t.noteId);
+        return fresh ? { ...t, title: fresh.title } : t;
+      })
+    );
+  }, [notes]);
+
   const handleDeleted = useCallback(
     async (id: number) => {
       try {
