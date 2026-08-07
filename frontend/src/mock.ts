@@ -24,6 +24,7 @@ const M = {
   OpenFiles: 1051351432,
   OpenFolderDialog: 2671632665,
   RenameNote: 2999546831,
+  SaveNoteAs: 3841328876,
   SearchNotes: 3427037650,
   TakePendingOpenedNote: 550119356,
   UpdateNote: 163960476,
@@ -235,6 +236,15 @@ export function installMock() {
         case M.ImportFolder:
         case M.ImportFiles:
           return [];
+        case M.SaveNoteAs: {
+          // The native dialog needs a real OS; in the browser we fake a
+          // successful write to a plausible path so the toast still works.
+          const id = Number(a1);
+          const note = seed.find((n) => n.id === id);
+          if (!note) return null;
+          const safeName = (note.title.replace(/[\\/:*?"<>|]/g, " ").trim() || "Untitled") + ".md";
+          return { savedPath: `C:\\Users\\you\\Desktop\\${safeName}` };
+        }
         case M.SearchNotes: {
           const q = String(a1 ?? "").toLowerCase();
           return seed

@@ -14,5 +14,6 @@ export type {
     LinkInfo,
     Note,
     NoteSummary,
+    SaveNoteResult,
     Settings
 } from "./models.js";

@@ -125,6 +125,17 @@ export function RenameNote(id: number, title: string): $CancellablePromise<$mode
 }
 
 /**
+ * SaveNoteAs shows the system save dialog with the note's title as the
+ * default file name and writes the note to the folder the user picks — any
+ * folder they want (Documents, Downloads, Desktop, …). Returns the written
+ * path, or a result with an empty path when the user cancels. The format is
+ * chosen by the file extension: .md, .html or .txt.
+ */
+export function SaveNoteAs(id: number): $CancellablePromise<$models.SaveNoteResult | null> {
+    return $Call.ByID(951930592, id);
+}
+
+/**
  * SearchNotes returns notes whose title or content matches the query.
  */
 export function SearchNotes(query: string): $CancellablePromise<$models.NoteSummary[] | null> {

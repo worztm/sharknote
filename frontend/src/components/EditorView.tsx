@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   PanelRight,
   PencilLine,
+  Save,
   Trash2,
 } from "lucide-react";
 import DOMPurify from "dompurify";
@@ -45,6 +46,8 @@ interface EditorViewProps {
   onCreateNote: (title: string) => void;
   /** Opens the shared rename dialog (title edits are handled app-wide). */
   onRequestRename: (currentTitle: string) => void;
+  /** Save the note as a file wherever the user picks (native dialog). */
+  onSaveNoteAs: (noteId: number) => void;
   /** Bumped after an external rename so the header title refreshes. */
   titleReloadKey?: number;
   /** How fresh notes open: "preview" (rendered) or "edit". */
@@ -228,6 +231,7 @@ export function EditorView({
   onOpenNote,
   onCreateNote,
   onRequestRename,
+  onSaveNoteAs,
   titleReloadKey,
   defaultView,
   autosaveDelay,
@@ -357,6 +361,20 @@ export function EditorView({
       setSaveStateSafe("saved");
     }
   }, [noteId, onSaved]);
+
+  // “Save as…” flushes any unsaved typing first, so the file the user
+  // writes to disk matches what they’re looking at, then hands the dialog
+  // to the app (native save + toast with the final path).
+  const handleSaveAs = useCallback(async () => {
+    if (dirtyRef.current) {
+      try {
+        await saveNow();
+      } catch {
+        // Keep going even if the flush failed: the stored copy still exists.
+      }
+    }
+    onSaveNoteAs(noteId);
+  }, [dirtyRef, saveNow, onSaveNoteAs, noteId]);
 
   const scheduleSave = useCallback(() => {
     dirtyRef.current = true;
@@ -801,6 +819,10 @@ export function EditorView({
                 <DropdownMenuItem onSelect={() => onRequestRename(note.title)}>
                   <PencilLine className="size-4" />
                   Rename note
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void handleSaveAs()}>
+                  <Save className="size-4" />
+                  Save as file…
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setPreview((p) => !p)}>
                   <Eye className="size-4" />

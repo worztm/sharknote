@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { Events } from "@wailsio/runtime";
 import { NoteService } from "../bindings/sharknote";
 import type { Note, NoteSummary } from "../bindings/sharknote";
@@ -47,6 +48,9 @@ export default function App() {
   } | null>(null);
   // Bumped after every rename so the editor re-fetches the note's title.
   const [titleReloadKey, setTitleReloadKey] = useState(0);
+  // Transient “Saved to …” toast shown after a Save as… export.
+  const [saveToast, setSaveToast] = useState<{ text: string; key: number } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   // Tab that was active before the graph was opened (for its Back button).
   const lastNoteKeyRef = useRef<string | null>(null);
 
@@ -225,9 +229,28 @@ export default function App() {
     [settings.confirmDelete, handleDeleted]
   );
 
-  // Renames the note, then refreshes the list and the open tab so the new
-  // title shows up everywhere. The backend rewrites every [[wiki link]] that
-  // pointed at the old title, so nothing dangles.
+  // Opens the native save dialog for a note and announces the written path,
+  // so the user always sees exactly where their file landed.
+  const handleSaveNoteAs = useCallback(async (noteId: number) => {
+    try {
+      const res = await NoteService.SaveNoteAs(noteId);
+      if (res?.savedPath) {
+        setSaveToast({ text: res.savedPath, key: Date.now() });
+      }
+    } catch (err) {
+      console.error("SaveNoteAs failed", err);
+    }
+  }, []);
+
+  // Auto-hide the toast a few seconds after it appears.
+  useEffect(() => {
+    if (!saveToast) return;
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setSaveToast(null), 5200);
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, [saveToast]);
   const handleRenamed = useCallback(
     async (newTitle: string) => {
       const target = renameTarget;
@@ -459,6 +482,7 @@ export default function App() {
               const id = activeTab?.kind === "note" ? activeTab.noteId : null;
               if (id != null) setRenameTarget({ id, title: currentTitle });
             }}
+            onSaveNoteAs={handleSaveNoteAs}
             titleReloadKey={titleReloadKey}
             defaultView={settings.defaultView}
             autosaveDelay={settings.autosaveDelay}
@@ -501,6 +525,10 @@ export default function App() {
           setPaletteOpen(false);
           void openFolderDialog();
         }}
+        onSaveNoteAs={(id) => {
+          setPaletteOpen(false);
+          void handleSaveNoteAs(id);
+        }}
         onOpenSettings={() => {
           setPaletteOpen(false);
           setSettingsOpen(true);
@@ -533,6 +561,22 @@ export default function App() {
         onClose={() => setRenameTarget(null)}
         onRename={handleRenamed}
       />
+
+      {/* ---------- “Saved to …” toast ---------- */}
+      {saveToast && (
+        <div
+          key={saveToast.key}
+          className="fixed bottom-5 left-1/2 z-[100] flex max-w-[min(90vw,44rem)] -translate-x-1/2 items-center gap-2 border border-border bg-background/95 px-4 py-2.5 text-[13px] text-foreground shadow-lg"
+        >
+          <Check className="size-3.5 shrink-0 text-(--link-strong)" />
+          <span className="min-w-0 truncate">
+            <span className="text-muted-foreground">Saved to </span>
+            <code className="rounded-sm bg-muted px-1.5 py-0.5 text-[12px]">
+              {saveToast.text}
+            </code>
+          </span>
+        </div>
+      )}
 
       {/* ---------- Delete confirmation (global) ---------- */}
       <AlertDialog

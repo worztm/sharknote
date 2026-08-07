@@ -76,6 +76,14 @@ export interface NoteSummary {
 }
 
 /**
+ * SaveNoteResult reports where a "Save as…" write landed. SavedPath is empty
+ * when the user cancelled the dialog.
+ */
+export interface SaveNoteResult {
+    "savedPath": string;
+}
+
+/**
  * Settings is the user-customizable application configuration. The frontend
  * treats it as one opaque bundle: it loads it at startup, applies it to the
  * UI, and persists it back with UpdateSettings whenever the user changes

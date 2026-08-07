@@ -3,6 +3,7 @@ import {
   FilePlus2,
   FileText,
   FolderOpen,
+  Save,
   Settings2,
   Trash2,
   Waypoints,
@@ -32,6 +33,8 @@ interface CommandPaletteProps {
   onOpenFiles: () => void;
   /** Import a whole folder and set it as the vault. */
   onOpenFolder: () => void;
+  /** Save the open note as a file via the native save dialog. */
+  onSaveNoteAs: (id: number) => void;
   onOpenSettings: () => void;
 }
 
@@ -46,6 +49,7 @@ export function CommandPalette({
   onOpenGraph,
   onOpenFiles,
   onOpenFolder,
+  onSaveNoteAs,
   onOpenSettings,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
@@ -120,6 +124,16 @@ export function CommandPalette({
             <Settings2 className="size-4" style={{ color: "var(--link-strong)" }} />
             Settings
           </CommandItem>
+          {activeId != null && (
+            <CommandItem value="__saveas__" onSelect={() => {
+                onOpenChange(false);
+                onSaveNoteAs(activeId);
+              }}
+            >
+              <Save className="size-4" style={{ color: "var(--link-strong)" }} />
+              Save current note as…
+            </CommandItem>
+          )}
           {activeId != null && (
             <CommandItem
               value="__delete__"

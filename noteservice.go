@@ -153,6 +153,30 @@ func (s *NoteService) ImportFolder(dir string) ([]int64, error) {
 	return s.ImportFiles(files)
 }
 
+// SaveNoteAs shows the system save dialog with the note's title as the
+// default file name and writes the note to the folder the user picks — any
+// folder they want (Documents, Downloads, Desktop, …). Returns the written
+// path, or a result with an empty path when the user cancels. The format is
+// chosen by the file extension: .md, .html or .txt.
+func (s *NoteService) SaveNoteAs(id int64) (*SaveNoteResult, error) {
+	note, err := s.store.GetNote(id)
+	if err != nil {
+		return nil, err
+	}
+	defaultName := sanitizeFileName(note.Title) + ".md"
+	path, err := showSaveFileDialog(0, defaultName)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, nil // user cancelled
+	}
+	if err := WriteNoteFile(path, note); err != nil {
+		return nil, err
+	}
+	return &SaveNoteResult{SavedPath: path}, nil
+}
+
 // OpenFiles shows a native multi-select dialog for markdown files, imports
 // the picked files, and returns the ids of the notes that were created or
 // updated. Returns nil when the user cancels.
