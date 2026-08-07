@@ -49,6 +49,48 @@ func parseWikiLinks(content string) []parsedLink {
 	return out
 }
 
+// rewriteWikiTitle changes every [[wiki link]] in a note that points at the
+// given title to point at newTitle instead, preserving any alias and section
+// parts: [[Old Title]] → [[New Title]], [[Old Title|alias]] → [[New Title|alias]],
+// [[Old Title#Section]] → [[New Title#Section]]. Matching is case-insensitive
+// like link resolution. It runs on the literal note content (rich text HTML),
+// so links split across HTML tags are left alone.
+func rewriteWikiTitle(content, oldTitle, newTitle string) string {
+	if oldTitle == newTitle || content == "" {
+		return content
+	}
+	var out strings.Builder
+	out.Grow(len(content) + 16)
+	last := 0
+	changed := false
+	for _, m := range wikiLinkRE.FindAllStringSubmatchIndex(content, -1) {
+		inner := content[m[2]:m[3]]
+		t := strings.TrimSpace(inner)
+		// The target ends at the first alias (|) or section (#) separator.
+		sep := len(t)
+		if i := strings.Index(t, "|"); i >= 0 && i < sep {
+			sep = i
+		}
+		if i := strings.Index(t, "#"); i >= 0 && i < sep {
+			sep = i
+		}
+		target := strings.TrimSpace(t[:sep])
+		if strings.EqualFold(target, oldTitle) {
+			out.WriteString(content[last:m[0]])
+			out.WriteString("[[" + newTitle)
+			out.WriteString(t[sep:])
+			out.WriteString("]]")
+			last = m[1]
+			changed = true
+		}
+	}
+	if !changed {
+		return content
+	}
+	out.WriteString(content[last:])
+	return out.String()
+}
+
 // replaceLinks rewrites the link table for a note based on its content.
 func (s *Store) replaceLinks(noteID int64, content string) error {
 	tx, err := s.db.Begin()

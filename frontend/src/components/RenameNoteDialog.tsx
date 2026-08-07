@@ -52,8 +52,8 @@ export function RenameNoteDialog({
             Rename note
           </DialogTitle>
           <DialogDescription>
-            Change the note's title — wiki links pointing at the old name will
-            no longer match.
+            Every note that links to “{initialTitle}” is updated to point at
+            the new title automatically.
           </DialogDescription>
         </DialogHeader>
         <form

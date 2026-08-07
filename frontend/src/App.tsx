@@ -7,6 +7,7 @@ import { EditorView } from "./components/EditorView";
 import { GraphView } from "./components/GraphView";
 import { CommandPalette } from "./components/CommandPalette";
 import { NewTabDialog } from "./components/NewTabDialog";
+import { RenameNoteDialog } from "./components/RenameNoteDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { TabsBar, type TabItem } from "./components/TabsBar";
 import {
@@ -39,6 +40,13 @@ export default function App() {
   const [prefillTitle, setPrefillTitle] = useState<string | null>(null);
   // Note awaiting delete confirmation (single dialog for the whole app).
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  // Note awaiting rename confirmation (single dialog for the whole app).
+  const [renameTarget, setRenameTarget] = useState<{
+    id: number;
+    title: string;
+  } | null>(null);
+  // Bumped after every rename so the editor re-fetches the note's title.
+  const [titleReloadKey, setTitleReloadKey] = useState(0);
   // Tab that was active before the graph was opened (for its Back button).
   const lastNoteKeyRef = useRef<string | null>(null);
 
@@ -217,6 +225,30 @@ export default function App() {
     [settings.confirmDelete, handleDeleted]
   );
 
+  // Renames the note, then refreshes the list and the open tab so the new
+  // title shows up everywhere. The backend rewrites every [[wiki link]] that
+  // pointed at the old title, so nothing dangles.
+  const handleRenamed = useCallback(
+    async (newTitle: string) => {
+      const target = renameTarget;
+      if (!target) return;
+      setRenameTarget(null);
+      const t = newTitle.trim();
+      if (!t || t === target.title) return;
+      try {
+        const note = await NoteService.RenameNote(target.id, t);
+        if (note) {
+          handleSaved(note);
+          await refreshNotes();
+          setTitleReloadKey((k) => k + 1);
+        }
+      } catch (err) {
+        console.error("RenameNote failed", err);
+      }
+    },
+    [renameTarget, handleSaved, refreshNotes]
+  );
+
   const deleteTargetTitle =
     deleteTarget != null
       ? notes.find((n) => n.id === deleteTarget)?.title ?? "this note"
@@ -297,7 +329,12 @@ export default function App() {
 
   // ---------- Keyboard shortcuts ------------------------------------------
 
-  const skipShortcuts = paletteOpen || settingsOpen || deleteTarget != null || prefillTitle != null;
+  const skipShortcuts =
+    paletteOpen ||
+    settingsOpen ||
+    deleteTarget != null ||
+    renameTarget != null ||
+    prefillTitle != null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -378,6 +415,7 @@ export default function App() {
         onOpenFiles={openFilesDialog}
         onOpenFolder={openFolderDialog}
         onOpenSettings={() => setSettingsOpen(true)}
+        onRequestRename={(id, currentTitle) => setRenameTarget({ id, title: currentTitle })}
         vaultPath={settings.vaultPath}
         view={view}
       />
@@ -417,6 +455,11 @@ export default function App() {
             onRequestDelete={requestDelete}
             onOpenNote={(id) => openNote(id, "auto")}
             onCreateNote={(title) => setPrefillTitle(title)}
+            onRequestRename={(currentTitle) => {
+              const id = activeTab?.kind === "note" ? activeTab.noteId : null;
+              if (id != null) setRenameTarget({ id, title: currentTitle });
+            }}
+            titleReloadKey={titleReloadKey}
             defaultView={settings.defaultView}
             autosaveDelay={settings.autosaveDelay}
             onDirtyChange={handleDirtyChange}
@@ -481,6 +524,14 @@ export default function App() {
         settings={settings}
         onChange={updateSettings}
         onOpenFolder={openFolderDialog}
+      />
+
+      {/* ---------- Rename note (global) ---------- */}
+      <RenameNoteDialog
+        open={renameTarget != null}
+        initialTitle={renameTarget?.title ?? ""}
+        onClose={() => setRenameTarget(null)}
+        onRename={handleRenamed}
       />
 
       {/* ---------- Delete confirmation (global) ---------- */}

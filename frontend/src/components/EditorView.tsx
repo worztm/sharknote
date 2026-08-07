@@ -33,7 +33,6 @@ import {
 } from "./ui/dropdown-menu";
 import { FormatMenu, type FormatCommand } from "./FormatMenu";
 import { LinkPanel } from "./LinkPanel";
-import { RenameNoteDialog } from "./RenameNoteDialog";
 
 type SaveState = "saved" | "dirty" | "saving";
 
@@ -44,6 +43,10 @@ interface EditorViewProps {
   onRequestDelete: (id: number) => void;
   onOpenNote: (id: number) => void;
   onCreateNote: (title: string) => void;
+  /** Opens the shared rename dialog (title edits are handled app-wide). */
+  onRequestRename: (currentTitle: string) => void;
+  /** Bumped after an external rename so the header title refreshes. */
+  titleReloadKey?: number;
   /** How fresh notes open: "preview" (rendered) or "edit". */
   defaultView: "preview" | "edit";
   /** Debounce between typing and saving, in ms. */
@@ -224,6 +227,8 @@ export function EditorView({
   onRequestDelete,
   onOpenNote,
   onCreateNote,
+  onRequestRename,
+  titleReloadKey,
   defaultView,
   autosaveDelay,
   onDirtyChange,
@@ -236,7 +241,6 @@ export function EditorView({
   // in the user's preferred default view.
   const [preview, setPreview] = useState(defaultView !== "edit");
   const [panelOpen, setPanelOpen] = useState(true);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [linkRefreshKey, setLinkRefreshKey] = useState(0);
 
   // Wiki-link autocomplete
@@ -301,6 +305,24 @@ export function EditorView({
       cancelled = true;
     };
   }, [noteId]);
+
+  // When the note's title is changed elsewhere (App-level rename dialog),
+  // pull the fresh title once so the header keeps up. Content is not touched
+  // so unsaved edits in the editor stay.
+  const firstReloadRef = useRef(true);
+  useEffect(() => {
+    if (firstReloadRef.current) {
+      firstReloadRef.current = false;
+      return;
+    }
+    NoteService.GetNote(noteId)
+      .then((n) => {
+        if (!n) return;
+        setTitle(n.title);
+        titleRef.current = n.title;
+      })
+      .catch((err) => console.error("GetNote title refresh failed", err));
+  }, [noteId, titleReloadKey]);
 
   // The editor div is uncontrolled: whenever it (re-)mounts — note load or
   // switching back from preview — push the current content into the DOM.
@@ -776,7 +798,7 @@ export function EditorView({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+                <DropdownMenuItem onSelect={() => onRequestRename(note.title)}>
                   <PencilLine className="size-4" />
                   Rename note
                 </DropdownMenuItem>
@@ -919,18 +941,7 @@ export function EditorView({
         />
       )}
 
-      {/* ---------- Rename dialog ---------- */}
-      <RenameNoteDialog
-        open={renameOpen}
-        initialTitle={title}
-        onClose={() => setRenameOpen(false)}
-        onRename={(newTitle) => {
-          setRenameOpen(false);
-          if (newTitle === title) return;
-          setTitle(newTitle);
-          scheduleSave();
-        }}
-      />
+      {/* ---------- Rename handled app-wide (App-level dialog) ---------- */}
     </div>
   );
 }

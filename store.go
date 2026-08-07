@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -287,6 +288,86 @@ func (s *Store) UpdateNote(id int64, title, content string) (*Note, error) {
 func (s *Store) DeleteNote(id int64) error {
 	_, err := s.db.Exec("DELETE FROM notes WHERE id = ?", id)
 	return err
+}
+
+// RenameNote changes a note's title and rewrites every [[wiki link]] in the
+// other notes that pointed at the old title, so backlinks, the graph and the
+// literal link text all keep working. Pending (unresolved) links that match
+// the new title finally resolve; links whose text pointed at the old title
+// are updated to the new one and resolve immediately.
+func (s *Store) RenameNote(id int64, newTitle string) (*Note, error) {
+	newTitle = strings.TrimSpace(newTitle)
+	if newTitle == "" {
+		return nil, errors.New("title cannot be empty")
+	}
+	var oldTitle string
+	if err := s.db.QueryRow("SELECT title FROM notes WHERE id = ?", id).Scan(&oldTitle); err != nil {
+		return nil, err
+	}
+	if oldTitle == newTitle {
+		return s.GetNote(id)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		"UPDATE notes SET title = ?, updated_at = ? WHERE id = ?",
+		newTitle, nowISO(), id,
+	); err != nil {
+		return nil, err
+	}
+
+	// Update the literal [[links]] in every other note and rebuild those
+	// notes' link rows so backlinks and the graph reflect the rename.
+	rows, err := tx.Query("SELECT id, content FROM notes WHERE id != ?", id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var otherID int64
+		var content string
+		if err := rows.Scan(&otherID, &content); err != nil {
+			return nil, err
+		}
+		rewritten := rewriteWikiTitle(content, oldTitle, newTitle)
+		if rewritten == content {
+			continue
+		}
+		if _, err := tx.Exec(
+			"UPDATE notes SET content = ?, updated_at = ? WHERE id = ?",
+			rewritten, nowISO(), otherID,
+		); err != nil {
+			return nil, err
+		}
+		if err := s.replaceLinksTx(tx, otherID, rewritten); err != nil {
+			return nil, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Point every still-unresolved link with the old title text at the new
+	// title, then resolve them (they now have a matching note).
+	if _, err := tx.Exec(
+		"UPDATE links SET unresolved_target = ? WHERE unresolved_target IS NOT NULL AND lower(unresolved_target) = lower(?)",
+		newTitle, oldTitle,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if err := s.resolvePending(newTitle); err != nil {
+		return nil, err
+	}
+	return s.GetNote(id)
 }
 
 func (s *Store) ListNotes() ([]NoteSummary, error) {

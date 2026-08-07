@@ -23,6 +23,7 @@ const M = {
   ListNotes: 27288930,
   OpenFiles: 1051351432,
   OpenFolderDialog: 2671632665,
+  RenameNote: 2999546831,
   SearchNotes: 3427037650,
   TakePendingOpenedNote: 550119356,
   UpdateNote: 163960476,
@@ -193,6 +194,32 @@ export function installMock() {
           const i = seed.findIndex((n) => n.id === a1);
           if (i >= 0) seed.splice(i, 1);
           return null;
+        }
+        case M.RenameNote: {
+          const id = Number(a1);
+          const newTitle = String(a2 ?? "").trim();
+          const note = seed.find((n) => n.id === id);
+          if (!note || !newTitle) return null;
+          const oldTitle = note.title;
+          if (oldTitle !== newTitle) {
+            note.title = newTitle;
+            note.updatedAt = now();
+            // Rewrite [[old title]] links in the other notes, mirroring the
+            // backend's RenameNote behaviour.
+            const re = new RegExp(
+              "\\[\\[\\s*(" +
+                oldTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+                ")(\\||#|\\s*\\]\\])",
+              "gi"
+            );
+            for (const other of seed) {
+              if (other.id === id) continue;
+              other.content = other.content.replace(re, (m, _t, rest) => {
+                return (rest === "]]" ? "[[" + newTitle + "]]" : "[[" + newTitle + " " + rest.trim() + "]]").replace("  ", " ");
+              });
+            }
+          }
+          return { ...note };
         }
         case M.GetSettings:
           return { ...mockSettings };

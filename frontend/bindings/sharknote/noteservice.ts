@@ -117,6 +117,14 @@ export function OpenFolderDialog(): $CancellablePromise<number[] | null> {
 }
 
 /**
+ * RenameNote changes a note's title and rewrites every [[wiki link]] that
+ * pointed at the old title in other notes.
+ */
+export function RenameNote(id: number, title: string): $CancellablePromise<$models.Note | null> {
+    return $Call.ByID(2999546831, id, title);
+}
+
+/**
  * SearchNotes returns notes whose title or content matches the query.
  */
 export function SearchNotes(query: string): $CancellablePromise<$models.NoteSummary[] | null> {

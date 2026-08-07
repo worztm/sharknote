@@ -55,6 +55,12 @@ func (s *NoteService) UpdateNote(id int64, title, content string) (*Note, error)
 	return s.store.UpdateNote(id, title, content)
 }
 
+// RenameNote changes a note's title and rewrites every [[wiki link]] that
+// pointed at the old title in other notes.
+func (s *NoteService) RenameNote(id int64, title string) (*Note, error) {
+	return s.store.RenameNote(id, title)
+}
+
 // DeleteNote permanently removes a note and all links pointing to or from it.
 func (s *NoteService) DeleteNote(id int64) error {
 	return s.store.DeleteNote(id)

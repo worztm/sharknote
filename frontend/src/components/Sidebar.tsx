@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2 } from "lucide-react";
+import { FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine } from "lucide-react";
 import type { NoteSummary } from "../../bindings/sharknote";
 import { Logo } from "../App";
 import { relativeTime } from "../lib/time";
@@ -20,6 +20,8 @@ interface SidebarProps {
   onOpenFiles: () => void;
   /** Import a whole folder and set it as the vault. */
   onOpenFolder: () => void;
+  /** Rename a note from the sidebar (opens the shared rename dialog). */
+  onRequestRename: (id: number, currentTitle: string) => void;
   onOpenSettings: () => void;
   vaultPath: string;
   view: View;
@@ -59,6 +61,7 @@ export function Sidebar({
   onDeleteNote,
   onOpenFiles,
   onOpenFolder,
+  onRequestRename,
   onOpenSettings,
   vaultPath,
   view,
@@ -194,6 +197,17 @@ export function Sidebar({
                             {n.excerpt}
                           </div>
                         )}
+                      </button>
+                      {/* Actions — revealed on hover */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestRename(n.id, n.title);
+                        }}
+                        title={`Rename “${n.title}”`}
+                        className="absolute right-9 top-1.5 z-10 flex size-6 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition hover:bg-(--accent-soft) hover:text-(--link-strong) focus:opacity-100 group-hover:opacity-100"
+                      >
+                        <PencilLine className="size-3.5" />
                       </button>
                       {/* Delete — revealed on hover */}
                       <button
