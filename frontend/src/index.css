@@ -252,7 +252,9 @@
     font-size: var(--editor-font-size);
     line-height: 1.75;
     color: var(--md-text);
-    overflow-wrap: break-word;
+    /* anywhere > break-word: even content already in the note wraps instead
+       of forcing the renderer to lay out one enormous unbreakable line. */
+    overflow-wrap: anywhere;
     user-select: text;
   }
   /* Editor font family preference (data-editor-font on <html>) */
@@ -590,7 +592,7 @@
     font-size: var(--editor-font-size);
     line-height: 1.75;
     caret-color: var(--caret);
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
   .editor-area::selection {
     background: var(--selection);

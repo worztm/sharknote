@@ -79,6 +79,34 @@ Machine-wide install (admin) to `bin/sharknote-amd64-installer.exe`:
 wails3 task windows:package INSTALL_SCOPE=machine
 ```
 
+SIGNING (WINDOWS TRUST)
+
+Both the .exe and the installer are signed with the Sharknote code-signing
+certificate (`$HOME/sharknote-signing/sharknote-code-signing.pfx`)
+using `scripts/sign-windows.sh`, which requires `osslsigncode` in
+`build/tools/bin/`:
+
+```
+bash scripts/sign-windows.sh
+```
+
+Note: a self-signed signature shows a publisher name and survives AV scrutiny,
+but Windows SmartScreen / browser download warnings only fully disappear once
+the app builds reputation or the files are signed with a certificate from a
+public CA (DigiCert, Sectigo, Azure Trusted Signing). The website explains
+how to run the app past the warning.
+
+RELEASING TO THE WEBSITE
+
+```
+# 1. bump the version in build/windows/info.json, build/windows/nsis/project.nsi
+#    and website/src/App.jsx, then build + sign (above)
+# 2. update INSTALLER_SHA256 in website/src/App.jsx:
+sha256sum bin/sharknote-amd64-installer.exe
+# 3. build the site and deploy to Cloudflare Pages:
+cd website && npm run deploy
+```
+
 UI-ONLY DEVELOPMENT (NO GO BACKEND)
 
 The UI can run in a plain browser against an in-memory mock of the backend:

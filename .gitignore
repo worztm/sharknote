@@ -36,3 +36,6 @@ desktop.ini
 # Website
 website/node_modules/
 website/dist/
+
+# ── Local build tooling / signing ──
+build/tools/

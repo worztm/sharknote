@@ -53,6 +53,103 @@ interface EditorViewProps {
 }
 
 
+// --- Paste safety ---------------------------------------------------------
+// A pasted blob can be megabytes of text with no spaces (a long URL, base64,
+// minified JSON, a whole copied page). Inserting it as one giant unbroken
+// text run is a known WebView2/Blink failure mode — the renderer shapes and
+// lays out the whole line and the app crashes. Two layers of defense:
+//   1. Every long run of unbroken text gets <wbr> break opportunities every
+//      LONG_RUN_BREAK chars, so layout only ever sees short text runs.
+//      <wbr> is invisible and has no text content, so notes stay clean.
+//   2. Pastes larger than one chunk are inserted a few chunks per frame,
+//      so no single edit command handles the whole blob at once.
+
+const PASTE_MAX_CHARS = 24 * 1024 * 1024; // refuse anything over 24 MB
+const PASTE_CHUNK_CHARS = 128 * 1024; // chars inserted per animation frame
+const LONG_RUN_BREAK = 2048; // <wbr> inserted every this many unbroken chars
+const WBR = '<wbr>';
+
+/** Minimal HTML escaping for text that is about to be inserted as HTML. */
+function escapeHtmlBasic(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Inserts <wbr> after every LONG_RUN_BREAK chars inside unbroken runs. */
+function addWordBreakOpportunities(s: string): string {
+  if (s.length <= LONG_RUN_BREAK) return s;
+  let out = '';
+  let run = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch.trim() === '') {
+      out += ch;
+      run = 0;
+    } else {
+      out += ch;
+      run++;
+      if (run === LONG_RUN_BREAK) {
+        out += WBR;
+        run = 0;
+      }
+    }
+  }
+  return out;
+}
+
+/** Splits sanitized HTML into tag-safe chunks at node boundaries. */
+function chunkHtmlNodes(html: string, max: number): string[] {
+  const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+  const nodes = Array.from(doc.body.childNodes);
+  const tmp = document.createElement('div');
+  const chunks: string[] = [];
+  let buf: Node[] = [];
+  let size = 0;
+  const flush = () => {
+    if (buf.length === 0) return;
+    tmp.replaceChildren();
+    for (const n of buf) tmp.appendChild(n.cloneNode(true));
+    chunks.push(tmp.innerHTML);
+    buf = [];
+    size = 0;
+  };
+  for (const n of nodes) {
+    tmp.replaceChildren();
+    tmp.appendChild(n.cloneNode(true));
+    const cost = tmp.innerHTML.length;
+    if (cost > max) {
+      // Single node bigger than a chunk: never silently split a tag.
+      flush();
+      chunks.push(tmp.innerHTML);
+    } else if (size + cost > max) {
+      flush();
+      buf.push(n);
+      size = cost;
+    } else {
+      buf.push(n);
+      size += cost;
+    }
+  }
+  flush();
+  return chunks;
+}
+
+/** Splits paste HTML (which may contain <wbr> tags) at tag boundaries. */
+function chunkTextHtml(html: string, max: number): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < html.length) {
+    let end = Math.min(start + max, html.length);
+    if (end < html.length) {
+      // Back up to the last <wbr> so we never split a tag in half.
+      const wbr = html.lastIndexOf(WBR, end);
+      if (wbr > start) end = wbr;
+    }
+    chunks.push(html.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
+
 // --- Rich text helpers -----------------------------------------------------
 
 /** Maps a plain-text character offset to a DOM position inside the editor. */
@@ -298,6 +395,10 @@ export function EditorView({
   const handleEditorInput = useCallback(() => {
     const el = editorRef.current;
     if (!el) return;
+    // A chunked paste is still draining: let a manual keystroke take over
+    // (but don't cancel our own chunked inserts — each one fires an input
+    // event too).
+    if (!pasteChunkActiveRef.current) pasteQueueRef.current = null;
     syncFromEditor();
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
@@ -398,17 +499,114 @@ export function EditorView({
     [wikiQuery, autocompleteOptions, selectedIndex, insertLink]
   );
 
-  // Sanitize pasted HTML so nothing sketchy lands in the note.
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const html = e.clipboardData.getData("text/html");
-    const text = e.clipboardData.getData("text/plain");
-    if (html) {
-      document.execCommand("insertHTML", false, DOMPurify.sanitize(html));
-    } else if (text) {
-      document.execCommand("insertText", false, text);
+  // Refs for crash-safe pasting: chunks are drained one animation frame at
+  // a time so a huge paste never hits the renderer in one hit.
+  const pasteQueueRef = useRef<string[] | null>(null);
+  const pasteFrameRef = useRef(false);
+  const pasteChunkActiveRef = useRef(false);
+
+  /** Inserts one queued paste chunk per frame; syncs once the queue drains. */
+  const insertNextPasteChunk = useCallback(() => {
+    const queue = pasteQueueRef.current;
+    if (!queue || queue.length === 0) {
+      pasteQueueRef.current = null;
+      pasteFrameRef.current = false;
+      return;
     }
-  }, []);
+    let ok = true;
+    pasteChunkActiveRef.current = true;
+    try {
+      document.execCommand('insertHTML', false, queue.shift() ?? '');
+    } catch (err) {
+      console.error('paste chunk failed', err);
+      ok = false;
+    }
+    pasteChunkActiveRef.current = false;
+    if (!ok) {
+      pasteQueueRef.current = null;
+      pasteFrameRef.current = false;
+      return;
+    }
+    if (queue.length > 0) {
+      requestAnimationFrame(insertNextPasteChunk);
+    } else {
+      pasteQueueRef.current = null;
+      pasteFrameRef.current = false;
+      syncFromEditor();
+    }
+  }, [syncFromEditor]);
+
+  // Sanitize pasted HTML, break up giant unbroken words, and chunk huge
+  // pastes — a single >100 KB unbreakable text run can crash WebView2.
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const el = editorRef.current;
+      if (!el) return;
+      const rich = e.clipboardData.getData('text/html');
+      const text = e.clipboardData.getData('text/plain');
+      // Interrupt any in-flight chunked paste so chunks can't land at a caret
+      // the user has since moved.
+      pasteQueueRef.current = null;
+
+      let html: string;
+      if (rich) {
+        // Sanitize first so nothing sketchy can land in the note, then add
+        // break opportunities inside overly long words.
+        const doc = new DOMParser().parseFromString(
+          '<body>' + DOMPurify.sanitize(rich) + '</body>',
+          'text/html'
+        );
+        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+        const textNodes: Text[] = [];
+        while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+        for (const n of textNodes) {
+          const raw = n.textContent ?? '';
+          if (raw.length <= LONG_RUN_BREAK) continue;
+          const span = document.createElement('span');
+          span.innerHTML = addWordBreakOpportunities(escapeHtmlBasic(raw));
+          n.replaceWith(span);
+        }
+        html = doc.body.innerHTML;
+      } else if (text) {
+        html = addWordBreakOpportunities(escapeHtmlBasic(text));
+      } else {
+        return;
+      }
+      if (!html) return;
+      // Hard ceiling: keep the head of the blob instead of crashing.
+      if (html.length > PASTE_MAX_CHARS) {
+        html = html.slice(0, PASTE_MAX_CHARS);
+      }
+
+      if (html.length <= PASTE_CHUNK_CHARS) {
+        try {
+          document.execCommand('insertHTML', false, html);
+        } catch (err) {
+          console.error('paste failed', err);
+          // Last resort: forget formatting, keep the words.
+          try {
+            document.execCommand('insertText', false, text || rich || '');
+          } catch {
+            /* nothing left to try */
+          }
+        }
+        syncFromEditor();
+        return;
+      }
+
+      // Large paste: split at <wbr>/node boundaries (never mid-tag) and
+      // drain the queue across animation frames.
+      pasteQueueRef.current = rich
+        ? chunkHtmlNodes(html, PASTE_CHUNK_CHARS)
+        : chunkTextHtml(html, PASTE_CHUNK_CHARS);
+      if (!pasteFrameRef.current) {
+        pasteFrameRef.current = true;
+        requestAnimationFrame(insertNextPasteChunk);
+      }
+    },
+    [insertNextPasteChunk, syncFromEditor]
+  );
 
   // Docs-style formatting applied from the right-click menu.
   const handleFormatCommand = useCallback(
