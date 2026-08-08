@@ -12,9 +12,22 @@ type SaveNoteResult struct {
 	SavedPath string `json:"savedPath"`
 }
 
+// windowsReservedNames are device names Windows refuses to use as file
+// names (with or without an extension — "CON.md" is just as invalid as
+// "CON").
+var windowsReservedNames = map[string]bool{
+	"CON": true, "PRN": true, "AUX": true, "NUL": true,
+	"COM1": true, "COM2": true, "COM3": true, "COM4": true,
+	"COM5": true, "COM6": true, "COM7": true, "COM8": true,
+	"COM9": true, "LPT1": true, "LPT2": true, "LPT3": true,
+	"LPT4": true, "LPT5": true, "LPT6": true, "LPT7": true,
+	"LPT8": true, "LPT9": true,
+}
+
 // sanitizeFileName turns a note title into something usable as a file name:
 // Windows-invalid characters are replaced with spaces, and leading/trailing
-// dots/spaces are trimmed. Empty results fall back to "Untitled".
+// dots/spaces are trimmed. Empty results fall back to "Untitled", and
+// reserved device names get a prefix so the save can't silently fail.
 func sanitizeFileName(title string) string {
 	r := strings.NewReplacer(
 		`\`, " ", "/", " ", ":", " ", "*", " ", "?", " ", `"`, " ", "<", " ", ">", " ", "|", " ",
@@ -23,6 +36,13 @@ func sanitizeFileName(title string) string {
 	name = strings.Trim(strings.TrimSpace(name), ". ")
 	if name == "" {
 		return "Untitled"
+	}
+	base := name
+	if i := strings.IndexByte(name, '.'); i >= 0 {
+		base = name[:i]
+	}
+	if windowsReservedNames[strings.ToUpper(strings.TrimSpace(base))] {
+		name = "_" + name
 	}
 	return name
 }

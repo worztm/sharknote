@@ -12,6 +12,11 @@ func TestSanitizeFileName(t *testing.T) {
 		{"Meeting notes", "Meeting notes"},
 		{`C:\B/notes: "weird" *chars? ok|`, "C  B notes   weird   chars  ok"},
 		{"Trailing dots...", "Trailing dots"},
+		// Windows device names are not allowed as file names.
+		{"CON", "_CON"},
+		{"con.md", "_con.md"},
+		{"NUL", "_NUL"},
+		{"COM1", "_COM1"},
 		{"   ", "Untitled"},
 		{"", "Untitled"},
 		{".", "Untitled"},
