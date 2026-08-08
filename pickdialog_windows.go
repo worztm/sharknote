@@ -220,16 +220,20 @@ func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, err
 	}
 
 	// File mode: restrict to markdown (with an "All files" escape hatch).
-	// Folder mode: label the confirm button accordingly.
+	// Folder mode: label the confirm button accordingly. These pointers are
+	// used by the dialog while it is open, so they must survive the Show
+	// call below (see the KeepAlives at the end of the function).
+	var okLabel, mdName, mdSpec, allName, allSpec *uint16
+	var filters []comDlgFilterSpec
 	if folderMode {
-		okLabel, _ := windows.UTF16PtrFromString("Select folder")
+		okLabel, _ = windows.UTF16PtrFromString("Select folder")
 		syscall.SyscallN(vtbl.SetOkButtonLabel, uintptr(fd), uintptr(unsafe.Pointer(okLabel)))
 	} else {
-		mdName, _ := windows.UTF16PtrFromString("Markdown files")
-		mdSpec, _ := windows.UTF16PtrFromString("*.md")
-		allName, _ := windows.UTF16PtrFromString("All files")
-		allSpec, _ := windows.UTF16PtrFromString("*.*")
-		filters := []comDlgFilterSpec{
+		mdName, _ = windows.UTF16PtrFromString("Markdown files")
+		mdSpec, _ = windows.UTF16PtrFromString("*.md")
+		allName, _ = windows.UTF16PtrFromString("All files")
+		allSpec, _ = windows.UTF16PtrFromString("*.*")
+		filters = []comDlgFilterSpec{
 			{pszName: mdName, pszSpec: mdSpec},
 			{pszName: allName, pszSpec: allSpec},
 		}
@@ -247,9 +251,7 @@ func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, err
 	}
 	if int32(hr) < 0 {
 		return nil, hrError(hr)
-	}
-
-	var paths []string
+	}	var paths []string
 	if folderMode {
 		// Single selection.
 		var item unsafe.Pointer
@@ -291,5 +293,15 @@ func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, err
 			}
 		}
 	}
+	// The dialog keeps using these strings until it closes, so they must
+	// stay pinned in memory for the whole call — the GC would otherwise be
+	// free to reclaim them after their last source-level use.
+	runtime.KeepAlive(titlePtr)
+	runtime.KeepAlive(okLabel)
+	runtime.KeepAlive(mdName)
+	runtime.KeepAlive(mdSpec)
+	runtime.KeepAlive(allName)
+	runtime.KeepAlive(allSpec)
+	runtime.KeepAlive(filters)
 	return paths, nil
 }

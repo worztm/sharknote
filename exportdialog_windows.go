@@ -12,6 +12,7 @@ package main
 import (
 	"errors"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
@@ -97,6 +98,9 @@ func showSaveFileDialog(owner uintptr, defaultName string) (string, error) {
 	}
 
 	ret, _, _ := procGetSaveFileNameW.Call(uintptr(unsafe.Pointer(ofn)))
+	// The dialog reads the filter strings until it closes; pin them so the
+	// GC can't reclaim them while the modal is on screen.
+	runtime.KeepAlive(filter)
 	if ret != 0 {
 		// Windows appends the default extension only when lpstrDefExt is set;
 		// without it a name typed without an extension stays bare, which
