@@ -11,6 +11,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 )
@@ -97,7 +98,22 @@ func showSaveFileDialog(owner uintptr, defaultName string) (string, error) {
 
 	ret, _, _ := procGetSaveFileNameW.Call(uintptr(unsafe.Pointer(ofn)))
 	if ret != 0 {
-		return syscall.UTF16ToString(fileBuf), nil
+		// Windows appends the default extension only when lpstrDefExt is set;
+		// without it a name typed without an extension stays bare, which
+		// surprises people (“where did my .md go?”). Match the extension to
+		// the file-type dropdown the user actually picked.
+		path := syscall.UTF16ToString(fileBuf)
+		if filepath.Ext(path) == "" {
+			switch ofn.nFilterIndex {
+			case 2:
+				path += ".html"
+			case 3:
+				path += ".txt"
+			default: // Markdown, All files
+				path += ".md"
+			}
+		}
+		return path, nil
 	}
 	// 0 can mean "cancelled" (CommDlgExtendedError() == 0) or a real failure.
 	if code, _, _ := procCommDlgExtendedError.Call(); code != 0 {
