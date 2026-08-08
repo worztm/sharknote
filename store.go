@@ -641,14 +641,19 @@ func backlinkExcerpt(content, title string) string {
 // htmlTagRE matches any HTML tag so excerpts read cleanly from rich text notes.
 var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
 
+// mdHeadingLine matches a full markdown heading marker (all levels) at the
+// start of a line. It must be handled as one unit: replacing "# " before
+// "## " would otherwise turn "## Title" into "#Title".
+var mdHeadingLine = regexp.MustCompile(`(?m)^#{1,6}[ \t]+`)
+
 // stripMarkdown removes the most common markdown syntax so excerpts read
 // cleanly in the UI. Rich text (HTML) notes get their tags stripped too.
 func stripMarkdown(s string) string {
 	s = htmlTagRE.ReplaceAllString(s, " ")
 	s = wikiLinkRE.ReplaceAllString(s, "$1")
+	s = mdHeadingLine.ReplaceAllString(s, "")
 	for _, repl := range []struct{ from, to string }{
 		{"**", ""}, {"__", ""}, {"`", ""}, {"~~", ""},
-		{"# ", ""}, {"## ", ""}, {"### ", ""}, {"#### ", ""}, {"##### ", ""}, {"###### ", ""},
 		{"> ", ""}, {"- ", ""}, {"* ", ""}, {"+ ", ""},
 		{"[ ]", "☐"}, {"[x]", "☑"}, {"[X]", "☑"},
 	} {

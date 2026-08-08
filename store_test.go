@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,29 @@ func TestStoreCRUDAndLinks(t *testing.T) {
 	}
 	if len(hits) != 2 { // Alpha content + Beta title
 		t.Fatalf("want 2 hits, got %d", len(hits))
+	}
+}
+
+// Headings of every level must read cleanly in excerpts; "## Title" used to
+// come out as "#Title" because the "# " replacement ran before "## ".
+func TestExcerptStripsHeadingLevels(t *testing.T) {
+	s := testStore(t)
+	n, err := s.CreateNote("Deep dive", "## Sub section\n### And deeper\nAll the details.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ex string
+	for _, item := range list {
+		if item.ID == n.ID {
+			ex = item.Excerpt
+		}
+	}
+	if !strings.Contains(ex, "Sub section") || strings.Contains(ex, "#") {
+		t.Fatalf("heading markers should be gone, got %q", ex)
 	}
 }
 
