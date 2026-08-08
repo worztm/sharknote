@@ -544,6 +544,10 @@ func (s *Store) GetOutgoingLinks(id int64) ([]LinkInfo, error) {
 // GetBacklinks finds notes that link to the given note, either through a
 // resolved link or an unresolved wiki-link whose text matches the title.
 func (s *Store) GetBacklinks(id int64) ([]Backlink, error) {
+	var title string
+	if err := s.db.QueryRow("SELECT title FROM notes WHERE id = ?", id).Scan(&title); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`
 		SELECT DISTINCT n.id, n.title, n.content
 		FROM notes n
@@ -564,7 +568,7 @@ func (s *Store) GetBacklinks(id int64) ([]Backlink, error) {
 		if err := rows.Scan(&b.ID, &b.Title, &content); err != nil {
 			return nil, err
 		}
-		b.Excerpt = backlinkExcerpt(content, id)
+		b.Excerpt = backlinkExcerpt(content, title)
 		out = append(out, b)
 	}
 	return out, rows.Err()
@@ -582,33 +586,35 @@ func makeExcerpt(content string) string {
 }
 
 // backlinkExcerpt extracts a short snippet of content surrounding the
-// wiki-link that points at the given note.
-func backlinkExcerpt(content string, noteID int64) string {
-	_ = noteID
-	// Find the first wiki-link block in the content.
-	for _, m := range wikiLinkRE.FindAllStringIndex(content, -1) {
-		raw := content[m[0]+2 : m[1]-2] // strip [[ ]]
-		raw = strings.TrimSpace(raw)
-		if i := strings.IndexAny(raw, "|#"); i >= 0 {
-			raw = raw[:i]
+// wiki-link that points at the given note (matched by title, case-
+// insensitively, like link resolution). Falls back to the whole plain
+// text when the note body has no link to it.
+func backlinkExcerpt(content, title string) string {
+	title = strings.TrimSpace(title)
+	if title != "" {
+		for _, m := range wikiLinkRE.FindAllStringIndex(content, -1) {
+			raw := content[m[0]+2 : m[1]-2] // strip [[ ]]
+			raw = strings.TrimSpace(raw)
+			if i := strings.IndexAny(raw, "|#"); i >= 0 {
+				raw = raw[:i]
+			}
+			if strings.TrimSpace(raw) != "" && strings.EqualFold(raw, title) {
+				start := m[0] - 60
+				if start < 0 {
+					start = 0
+				}
+				end := m[1] + 60
+				if end > len(content) {
+					end = len(content)
+				}
+				snippet := stripMarkdown(content[start:end])
+				snippet = strings.Join(strings.Fields(snippet), " ")
+				if len(snippet) > 120 {
+					snippet = snippet[:120] + "…"
+				}
+				return snippet
+			}
 		}
-		if strings.TrimSpace(raw) == "" {
-			continue
-		}
-		start := m[0] - 60
-		if start < 0 {
-			start = 0
-		}
-		end := m[1] + 60
-		if end > len(content) {
-			end = len(content)
-		}
-		snippet := stripMarkdown(content[start:end])
-		snippet = strings.Join(strings.Fields(snippet), " ")
-		if len(snippet) > 120 {
-			snippet = snippet[:120] + "…"
-		}
-		return snippet
 	}
 	return stripMarkdown(content)
 }
