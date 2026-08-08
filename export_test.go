@@ -45,6 +45,24 @@ func TestHTMLToMarkdown(t *testing.T) {
 	}
 }
 
+// A note whose body carries its own heading must not repeat the title in
+// the exported page (the page heading already shows it).
+func TestExportHTMLNotDuplicatingOwnHeading(t *testing.T) {
+	n := &Note{
+		Title:     "Idea vault",
+		Content:   `<h1>Idea vault</h1><p>Body text.</p>`,
+		CreatedAt: "2026-08-01T09:00:00Z",
+		UpdatedAt: "2026-08-01T09:00:00Z",
+	}
+	s := exportHTML(n)
+	if got := strings.Count(s, "<h1>Idea vault</h1>"); got != 1 {
+		t.Fatalf("title heading appears %d times in the export, want 1:\n%s", got, s)
+	}
+	if !strings.Contains(s, "<p>Body text.</p>") {
+		t.Fatalf("body text missing from export:\n%s", s)
+	}
+}
+
 func TestWriteNoteFileFormats(t *testing.T) {
 	dir := t.TempDir()
 	note := &Note{

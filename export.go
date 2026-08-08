@@ -78,6 +78,24 @@ func exportMarkdown(note *Note) string {
 	return b.String()
 }
 
+// leadingH1 matches an <h1>…</h1> block at the very start of the content.
+var leadingH1 = regexp.MustCompile(`(?is)^\s*<h1[^>]*>(.*?)</h1>`)
+
+// stripLeadingTitle removes a leading <h1> whose text is the note title: the
+// exported page already renders the title once in its own heading, and notes
+// imported from markdown carry their own "# Title" heading in the body.
+func stripLeadingTitle(content, title string) string {
+	m := leadingH1.FindStringSubmatch(content)
+	if m == nil {
+		return content
+	}
+	inner := htmlEntityDecode(mdAnyTag.ReplaceAllString(m[1], ""))
+	if !strings.EqualFold(strings.TrimSpace(inner), strings.TrimSpace(title)) {
+		return content
+	}
+	return content[len(m[0]):]
+}
+
 func exportHTML(note *Note) string {
 	return "<!doctype html>\n" +
 		"<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n" +
@@ -88,7 +106,7 @@ func exportHTML(note *Note) string {
 		"padding-bottom:1rem;border-bottom:1px solid #ddd}</style>\n</head>\n<body>\n" +
 		"<h1>" + htmlEscape(note.Title) + "</h1>\n" +
 		"<div class=\"meta\">Created " + ymd(note.CreatedAt) + " · updated " + ymd(note.UpdatedAt) + "</div>\n" +
-		"<div class=\"note\">\n" + note.Content + "\n</div>\n</body>\n</html>\n"
+		"<div class=\"note\">\n" + stripLeadingTitle(note.Content, note.Title) + "\n</div>\n</body>\n</html>\n"
 }
 
 // exportPlain renders the note as readable plain text.
