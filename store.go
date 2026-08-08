@@ -352,6 +352,25 @@ func (s *Store) RenameNote(id int64, newTitle string) (*Note, error) {
 		return nil, err
 	}
 
+	// The renamed note may link to itself by the old title — a self-link
+	// like [[Graph view]] inside the “Graph view” note. Rewrite those too so
+	// the link text matches and stays resolved, like every other note's.
+	var selfContent string
+	if err := tx.QueryRow("SELECT content FROM notes WHERE id = ?", id).Scan(&selfContent); err != nil {
+		return nil, err
+	}
+	if rewritten := rewriteWikiTitle(selfContent, oldTitle, newTitle); rewritten != selfContent {
+		if _, err := tx.Exec(
+			"UPDATE notes SET content = ?, updated_at = ? WHERE id = ?",
+			rewritten, nowISO(), id,
+		); err != nil {
+			return nil, err
+		}
+		if err := s.replaceLinksTx(tx, id, rewritten); err != nil {
+			return nil, err
+		}
+	}
+
 	// Point every still-unresolved link with the old title text at the new
 	// title, then resolve them (they now have a matching note).
 	if _, err := tx.Exec(
