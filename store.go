@@ -595,13 +595,21 @@ func (s *Store) GetBacklinks(id int64) ([]Backlink, error) {
 
 // --- Helpers ---------------------------------------------------------------
 
+// cutRunes truncates s to at most max runes without ever splitting a UTF-8
+// character in half, then marks the cut. Byte-slicing a string that ends in
+// an emoji (or any multi-byte rune) produced a broken character.
+func cutRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
 func makeExcerpt(content string) string {
 	plain := stripMarkdown(content)
 	plain = strings.Join(strings.Fields(plain), " ")
-	if len(plain) > 140 {
-		plain = plain[:140] + "…"
-	}
-	return plain
+	return cutRunes(plain, 140)
 }
 
 // backlinkExcerpt extracts a short snippet of content surrounding the
@@ -628,10 +636,7 @@ func backlinkExcerpt(content, title string) string {
 				}
 				snippet := stripMarkdown(content[start:end])
 				snippet = strings.Join(strings.Fields(snippet), " ")
-				if len(snippet) > 120 {
-					snippet = snippet[:120] + "…"
-				}
-				return snippet
+				return cutRunes(snippet, 120)
 			}
 		}
 	}

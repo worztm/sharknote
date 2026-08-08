@@ -113,6 +113,28 @@ func TestExcerptStripsHeadingLevels(t *testing.T) {
 	}
 }
 
+// Emoji must never be split when excerpts are truncated — a byte-level cut
+// used to leave the replacement character in the sidebar.
+func TestExcerptTruncationKeepsRunesIntact(t *testing.T) {
+	s := testStore(t)
+	body := strings.Repeat("swim ", 60) + "🦈🦈"
+	n, err := s.CreateNote("Sharks", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range list {
+		if item.ID == n.ID {
+			if strings.ContainsRune(item.Excerpt, '\uFFFD') {
+				t.Fatalf("excerpt contains a broken character: %q", item.Excerpt)
+			}
+		}
+	}
+}
+
 func TestSeed(t *testing.T) {
 	s := testStore(t)
 	if err := s.Seed(); err != nil {
