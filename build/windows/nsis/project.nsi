@@ -35,7 +35,7 @@ Unicode true
 ####
 !define INFO_COMPANYNAME "Sharknote"
 !define INFO_PRODUCTNAME "Sharknote"
-!define INFO_PRODUCTVERSION "1.5.2"
+!define INFO_PRODUCTVERSION "1.5.3"
 !define INFO_COPYRIGHT "© 2026 Sharknote"
 !define UNINST_KEY_NAME "Sharknote"
 
@@ -146,6 +146,13 @@ Section
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
+
+    ; After a silent install (the in-app updater path), relaunch the freshly
+    ; installed app so an update feels like a simple reload. Normal installs
+    ; keep the standard behavior (no auto-launch).
+    ${If} ${Silent}
+        Exec '"$INSTDIR\${PRODUCT_EXECUTABLE}"'
+    ${EndIf}
     
     !insertmacro wails.writeUninstaller
 SectionEnd

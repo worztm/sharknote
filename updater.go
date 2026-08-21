@@ -105,15 +105,33 @@ func updateBaseURL() string {
 
 // pendingUpdateMarker is the file that records a downloaded+verified
 // installer across app restarts. It lives next to the notes DB.
-func pendingUpdateMarker() string {
+func updateStateDir() string {
 	if p := os.Getenv("SHARKNOTE_DB"); p != "" {
-		return filepath.Join(filepath.Dir(p), "pending-update.json")
+		return filepath.Dir(p)
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "sharknote", "pending-update.json")
+	return filepath.Join(dir, "sharknote")
+}
+
+func pendingUpdateMarker() string {
+	dir := updateStateDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "pending-update.json")
+}
+
+// updateLogPath is where the apply script records what happened — the first
+// place to look if an update ever fails to apply.
+func updateLogPath() string {
+	dir := updateStateDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "update.log")
 }
 
 type pendingUpdate struct {
@@ -346,31 +364,29 @@ func (u *UpdaterService) ApplyUpdate() error {
 		return errors.New("the downloaded update is missing; download it again")
 	}
 
-	// Relaunch the INSTALLED app (where users actually start it from), not
-	// necessarily the process we're running under (e.g. a dev build).
-	target := installedAppPath()
-	if target == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		target, err = filepath.Abs(exe)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Write a tiny .cmd script instead of fighting shell quoting rules.
+	// The installer itself relaunches the app after a silent install
+	// (see the ${Silent} block in project.nsi) — the installer is spawned
+	// here and is guaranteed to outlive this quitting process, which makes
+	// the whole handoff deterministic. Every step is logged so failures
+	// leave a trace in %APPDATA%\sharknote\update.log.
 	scriptPath := filepath.Join(os.TempDir(), strconv.Itoa(int(time.Now().UnixNano()))+"-sharknote-update.cmd")
-	script := strings.Join([]string{
-		"@echo off",
-		"\"" + path + "\" /S",
-		"del /q \"" + path + "\" >nul 2>&1",
-		"del /q \"" + pendingUpdateMarker() + "\" >nul 2>&1",
-		"ping -n 2 127.0.0.1 >nul", // ~1s grace period, no console input needed
-		"start \"\" \"" + target + "\"",
-	}, "\r\n") + "\r\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+	logPath := updateLogPath()
+	var b strings.Builder
+	b.WriteString("@echo off\r\n")
+	if logPath != "" {
+		b.WriteString("echo [%date% %time%] update script started >> \"" + logPath + "\"\r\n")
+	}
+	b.WriteString("\"" + path + "\" /S\r\n")
+	if logPath != "" {
+		b.WriteString("echo [%date% %time%] installer exit code %errorlevel% >> \"" + logPath + "\"\r\n")
+	}
+	b.WriteString("del /q \"" + path + "\" >nul 2>&1\r\n")
+	if marker := pendingUpdateMarker(); marker != "" {
+		b.WriteString("del /q \"" + marker + "\" >nul 2>&1\r\n")
+	}
+	b.WriteString("del /q \"%~f0\" >nul 2>&1\r\n")
+	if err := os.WriteFile(scriptPath, []byte(b.String()), 0o600); err != nil {
 		return err
 	}
 
