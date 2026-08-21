@@ -62,6 +62,7 @@ export interface Note {
     "content": string;
     "createdAt": string;
     "updatedAt": string;
+    "starred": boolean;
 }
 
 /**
@@ -73,6 +74,7 @@ export interface NoteSummary {
     "excerpt": string;
     "createdAt": string;
     "updatedAt": string;
+    "starred": boolean;
 }
 
 /**

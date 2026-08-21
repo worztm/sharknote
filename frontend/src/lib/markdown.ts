@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
+import markedKatex from "marked-katex-extension";
 import hljs from "highlight.js/lib/core";
 import DOMPurify from "dompurify";
 
@@ -167,6 +168,7 @@ function resolveLang(lang: string | null | undefined): string | null {
   if (!lang) return null;
   const name = lang.trim().split(/[\s.]+/)[0].toLowerCase();
   if (!name) return null;
+  if (name === "mermaid") return "mermaid";
   // Canonical aliases first (js → javascript, py → python, …) so fences and
   // labels read nicely; then let hljs resolve its own aliases (c++ → cpp…).
   const canonical = LANG_ALIASES[name];
@@ -187,6 +189,47 @@ marked.setOptions({
   gfm: true,
   breaks: true,
 });
+
+// --- Obsidian-style extensions ---------------------------------------------
+
+// ==inline highlight== → <mark>…</mark>
+marked.use({
+  extensions: [
+    {
+      name: "inlineMark",
+      level: "inline",
+      start(src: string) {
+        return src.indexOf("==");
+      },
+      tokenizer(src: string) {
+        const m = /^==(?![=\s])([\s\S]+?)==/.exec(src);
+        if (m) {
+          return {
+            type: "inlineMark",
+            raw: m[0],
+            tokens: this.lexer.inlineTokens(m[1]),
+          } as never;
+        }
+        return undefined as never;
+      },
+      renderer(token) {
+        const inner = this.parser.parseInline(token.tokens ?? []);
+        return `<mark>${inner}</mark>`;
+      },
+    },
+  ],
+  // Task list checkboxes stay interactive (no `disabled` attribute) so the
+  // editor and preview can toggle them.
+  renderer: {
+    checkbox(token: { checked?: boolean }) {
+      return `<input type="checkbox" class="task-checkbox"${token.checked ? " checked" : ""}>`;
+    },
+  },
+});
+
+// $inline math$ and $$display math$$ via KaTeX (HTML output only — MathML
+// would be stripped by the sanitizer).
+marked.use(markedKatex({ throwOnError: false, output: "html" }));
 
 // Fenced code blocks are highlighted as the editor tokenizes them: the hljs
 // spans live in the note's rich text, so colors persist in edit mode too.
@@ -324,12 +367,100 @@ function frontmatterCardHtml(fm: Frontmatter): string {
  * Converts legacy markdown notes into editor HTML. Wiki links stay as literal
  * [[...]] text — the preview renderer turns them into clickable pills.
  * Code fences are syntax-highlighted; a frontmatter block (if any) becomes a
- * metadata card at the top.
+ * metadata card at the top; Obsidian callouts become styled blocks.
  */
 export function markdownToEditorHtml(source: string): string {
   const { fm, body } = extractFrontmatter(source);
   const html = marked.parse(body) as string;
-  return fm ? frontmatterCardHtml(fm) + html : html;
+  const processed = enhanceCallouts(html);
+  return fm ? frontmatterCardHtml(fm) + processed : processed;
+}
+
+// --- Callouts (> [!tip] Title) ----------------------------------------------
+
+const CALLOUT_ICON_SVGS: Record<string, string> = {
+  pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  check: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  bug: '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6z"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>',
+  list: '<path d="M16 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M19 10v4"/><path d="M21 12h-4"/>',
+  quote:
+    '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+};
+
+/** Obsidian callout type → [icon key, css modifier] (defaults to note). */
+const CALLOUT_TYPES: Record<string, [string, string]> = {
+  note: ["pencil", "note"],
+  abstract: ["list", "abstract"], summary: ["list", "abstract"], tldr: ["list", "abstract"],
+  info: ["info", "info"],
+  todo: ["check", "todo"],
+  tip: ["flame", "tip"], hint: ["flame", "tip"], important: ["flame", "tip"],
+  success: ["check", "success"], done: ["check", "success"],
+  question: ["help", "question"], help: ["help", "question"], faq: ["help", "question"],
+  warning: ["alert", "warning"], caution: ["alert", "warning"], attention: ["alert", "warning"],
+  failure: ["zap", "failure"], fail: ["zap", "failure"], missing: ["zap", "failure"],
+  danger: ["zap", "danger"], error: ["zap", "danger"],
+  bug: ["bug", "bug"],
+  example: ["list", "example"],
+  quote: ["quote", "quote"], cite: ["quote", "quote"],
+};
+
+const CALLOUT_HEAD_RE = /^\[!([A-Za-z]+)\][+-]?[ \t]*(.*)$/;
+
+function calloutIcon(key: string): string {
+  const path = CALLOUT_ICON_SVGS[key] ?? CALLOUT_ICON_SVGS.pencil;
+  return `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
+/**
+ * Upgrades blockquotes whose first line is `[!type] Title` into styled
+ * callout blocks (Obsidian syntax). Runs on converted markdown so the
+ * resulting HTML persists in storage; plain quotes are left untouched.
+ */
+export function enhanceCallouts(html: string): string {
+  if (!html.includes("blockquote")) return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  let changed = false;
+  for (const bq of Array.from(doc.querySelectorAll("blockquote"))) {
+    const first = bq.firstElementChild;
+    if (!first) continue;
+    // The marker can be its own paragraph or lead a mixed one.
+    const walker = doc.createTreeWalker(first, NodeFilter.SHOW_TEXT);
+    const firstText = walker.nextNode() as Text | null;
+    if (!firstText) continue;
+    const m = CALLOUT_HEAD_RE.exec(firstText.textContent?.trim() ?? "");
+    if (!m) continue;
+    const rawType = m[1].toLowerCase();
+    const [iconKey, mod] = CALLOUT_TYPES[rawType] ?? ["pencil", "note"];
+    const titleText = m[2]?.trim() || rawType.charAt(0).toUpperCase() + rawType.slice(1);
+
+    // Remove the marker (and, if it filled the whole node, the node).
+    const rest = firstText.textContent!.slice(
+      firstText.textContent!.indexOf("]") + 1
+    );
+    firstText.textContent = rest.replace(/^[ \t+-]+/, "");
+    if (!first.textContent?.trim()) first.remove();
+
+    const div = doc.createElement("div");
+    div.className = `callout callout-${mod}`;
+    div.setAttribute("data-callout", mod);
+    const titleEl = doc.createElement("div");
+    titleEl.className = "callout-title";
+    titleEl.innerHTML = calloutIcon(iconKey) + `<span></span>`;
+    (titleEl.lastElementChild as HTMLElement).textContent = titleText;
+    const content = doc.createElement("div");
+    content.className = "callout-content";
+    while (bq.firstChild) content.appendChild(bq.firstChild);
+    div.appendChild(titleEl);
+    div.appendChild(content);
+    bq.replaceWith(div);
+    changed = true;
+  }
+  return changed ? doc.body.innerHTML : html;
 }
 
 /**
@@ -340,7 +471,7 @@ export function markdownToEditorHtml(source: string): string {
  */
 export function renderRichContent(html: string): string {
   const clean = DOMPurify.sanitize(html, {
-    ADD_ATTR: ["data-wiki-target", "contenteditable"],
+    ADD_ATTR: ["data-wiki-target", "contenteditable", "data-callout", "data-mermaid"],
   });
   const doc = new DOMParser().parseFromString(`<body>${clean}</body>`, "text/html");
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
@@ -399,6 +530,7 @@ const CHECK_ICON_SVG =
  * a note is handled independently, so mixed-language files get per-language
  * coloring. Blocks that already carry hljs spans (migrated markdown) are left
  * untouched; others get language-aware or auto-detected highlighting.
+ * Mermaid fences are kept as raw source for async diagram rendering.
  */
 function enhanceCodeBlocks(root: HTMLElement) {
   const preBlocks = Array.from(root.querySelectorAll("pre"));
@@ -408,6 +540,23 @@ function enhanceCodeBlocks(root: HTMLElement) {
     let lang = resolveLang(
       Array.from(code.classList).find((c) => c.startsWith("language-"))?.slice(9)
     );
+
+    // Mermaid: keep the source verbatim; diagrams render asynchronously via
+    // renderMermaidBlocks() after the preview mounts.
+    if (lang === "mermaid") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "code-block mermaid-block";
+      const head = document.createElement("div");
+      head.className = "code-block-head";
+      head.innerHTML = '<span class="code-lang">mermaid</span>';
+      pre.replaceWith(wrapper);
+      wrapper.appendChild(head);
+      wrapper.appendChild(pre);
+      code.removeAttribute("class");
+      code.setAttribute("data-mermaid", code.textContent ?? "");
+      continue;
+    }
+
     const isHighlighted = code.querySelector(".hljs-keyword, .hljs-string, .hljs-comment, .hljs-title");
     if (!isHighlighted) {
       const text = code.textContent ?? "";
@@ -463,4 +612,69 @@ export function stripHtml(html: string): string {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(html, "text/html");
   return doc.body.textContent ?? "";
+}
+
+// --- Mermaid diagrams --------------------------------------------------------
+
+let mermaidLib: typeof import("mermaid").default | null = null;
+let mermaidTheme = "";
+
+/**
+ * Renders every `[data-mermaid]` source block under `root` into an SVG
+ * diagram. The mermaid bundle is huge, so it's dynamically imported on
+ * first use — the main app bundle never pays for it.
+ */
+export async function renderMermaidBlocks(root: ParentNode, dark: boolean): Promise<number> {
+  const blocks = Array.from(root.querySelectorAll("[data-mermaid]"));
+  if (blocks.length === 0) return 0;
+  if (!mermaidLib || mermaidTheme !== (dark ? "dark" : "default")) {
+    const mod = await import("mermaid");
+    mermaidLib = mod.default;
+    mermaidTheme = dark ? "dark" : "default";
+    mermaidLib.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: mermaidTheme as "dark" | "default",
+    });
+  }
+  let rendered = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const el = blocks[i] as HTMLElement;
+    const src = el.getAttribute("data-mermaid") ?? "";
+    try {
+      const { svg } = await mermaidLib.render(`mermaid-${Date.now()}-${i}`, src);
+      const holder = document.createElement("div");
+      holder.className = "mermaid-diagram";
+      holder.innerHTML = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        ADD_ATTR: ["aria-roledescription"],
+      });
+      el.replaceWith(holder);
+      rendered++;
+    } catch {
+      // Invalid syntax → keep the raw source visible in the code block.
+      el.removeAttribute("data-mermaid");
+    }
+  }
+  return rendered;
+}
+
+// --- Outline (headings) ------------------------------------------------------
+
+export interface HeadingEntry {
+  level: number;
+  text: string;
+}
+
+/** Extracts the h1–h3 outline from stored rich-text HTML. */
+export function extractHeadings(html: string): HeadingEntry[] {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const out: HeadingEntry[] = [];
+  for (const h of Array.from(doc.querySelectorAll("h1, h2, h3"))) {
+    const text = (h.textContent ?? "").trim();
+    if (!text) continue;
+    out.push({ level: Number(h.tagName.slice(1)), text });
+  }
+  return out;
 }

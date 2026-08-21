@@ -21,6 +21,7 @@ type Note struct {
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
+	Starred   bool   `json:"starred"`
 }
 
 // NoteSummary is the lightweight record used for lists and search results.
@@ -30,6 +31,7 @@ type NoteSummary struct {
 	Excerpt   string `json:"excerpt"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
+	Starred   bool   `json:"starred"`
 }
 
 // GraphNode is a note rendered as a node in the knowledge graph.
@@ -73,7 +75,8 @@ CREATE TABLE IF NOT EXISTS notes (
 	title      TEXT NOT NULL,
 	content    TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL
+	updated_at TEXT NOT NULL,
+	starred    INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS links (
 	id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,6 +164,7 @@ func NewStore(path string) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{db: db}
+	s.migrate()
 	// Surface database corruption loudly instead of letting writes fail
 	// silently later (a corrupted file previously broke note deletion while
 	// reads kept working, and the failure was easy to miss).
@@ -168,6 +172,22 @@ func NewStore(path string) (*Store, error) {
 	s.syncFTS()
 	s.purgeSeedProjectNote()
 	return s, nil
+}
+
+// migrate applies additive schema migrations for databases created by older
+// versions. Each step ignores "already exists" errors so it is idempotent.
+func (s *Store) migrate() {
+	steps := []string{
+		// v1.7.0: bookmarked/starred notes.
+		"ALTER TABLE notes ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
+	}
+	for _, stmt := range steps {
+		if _, err := s.db.Exec(stmt); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				log.Printf("migration skipped: %v", err)
+			}
+		}
+	}
 }
 
 // checkIntegrity runs a quick structural check of the database and logs a
@@ -209,14 +229,14 @@ func nowISO() string { return time.Now().UTC().Format(time.RFC3339) }
 
 func scanNote(row interface{ Scan(...any) error }) (*Note, error) {
 	var n Note
-	if err := row.Scan(&n.ID, &n.Title, &n.Content, &n.CreatedAt, &n.UpdatedAt); err != nil {
+	if err := row.Scan(&n.ID, &n.Title, &n.Content, &n.CreatedAt, &n.UpdatedAt, &n.Starred); err != nil {
 		return nil, err
 	}
 	return &n, nil
 }
 
 func (s *Store) GetNote(id int64) (*Note, error) {
-	row := s.db.QueryRow("SELECT id, title, content, created_at, updated_at FROM notes WHERE id = ?", id)
+	row := s.db.QueryRow("SELECT id, title, content, created_at, updated_at, starred FROM notes WHERE id = ?", id)
 	n, err := scanNote(row)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("note %d not found", id)
@@ -226,7 +246,7 @@ func (s *Store) GetNote(id int64) (*Note, error) {
 
 // FindByTitle returns the note with the exact given title, or nil if none.
 func (s *Store) FindByTitle(title string) (*Note, error) {
-	row := s.db.QueryRow("SELECT id, title, content, created_at, updated_at FROM notes WHERE title = ? LIMIT 1", title)
+	row := s.db.QueryRow("SELECT id, title, content, created_at, updated_at, starred FROM notes WHERE title = ? LIMIT 1", title)
 	n, err := scanNote(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -288,6 +308,17 @@ func (s *Store) UpdateNote(id int64, title, content string) (*Note, error) {
 func (s *Store) DeleteNote(id int64) error {
 	_, err := s.db.Exec("DELETE FROM notes WHERE id = ?", id)
 	return err
+}
+
+// ToggleStar flips a note's bookmarked state and returns the new value.
+func (s *Store) ToggleStar(id int64) (bool, error) {
+	_, err := s.db.Exec("UPDATE notes SET starred = 1 - starred WHERE id = ?", id)
+	if err != nil {
+		return false, err
+	}
+	var starred bool
+	err = s.db.QueryRow("SELECT starred FROM notes WHERE id = ?", id).Scan(&starred)
+	return starred, err
 }
 
 // RenameNote changes a note's title and rewrites every [[wiki link]] in the
@@ -391,7 +422,7 @@ func (s *Store) RenameNote(id int64, newTitle string) (*Note, error) {
 
 func (s *Store) ListNotes() ([]NoteSummary, error) {
 	rows, err := s.db.Query(`
-		SELECT id, title, content, created_at, updated_at
+		SELECT id, title, content, created_at, updated_at, starred
 		FROM notes ORDER BY updated_at DESC`)
 	if err != nil {
 		return nil, err
@@ -405,7 +436,7 @@ func scanSummaries(rows *sql.Rows) ([]NoteSummary, error) {
 	for rows.Next() {
 		var n NoteSummary
 		var content string
-		if err := rows.Scan(&n.ID, &n.Title, &content, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Title, &content, &n.CreatedAt, &n.UpdatedAt, &n.Starred); err != nil {
 			return nil, err
 		}
 		n.Excerpt = makeExcerpt(content)
@@ -424,7 +455,7 @@ func (s *Store) SearchNotes(query string) ([]NoteSummary, error) {
 	}
 	if ftsQ := buildFTSQuery(q); ftsQ != "" {
 		rows, err := s.db.Query(`
-			SELECT n.id, n.title, n.content, n.created_at, n.updated_at
+			SELECT n.id, n.title, n.content, n.created_at, n.updated_at, n.starred
 			FROM notes_fts f
 			JOIN notes n ON n.id = f.rowid
 			WHERE notes_fts MATCH ?
@@ -443,7 +474,7 @@ func (s *Store) searchNotesLike(q string) ([]NoteSummary, error) {
 	like := "%" + escapeLike(q) + "%"
 	prefix := escapeLike(q) + "%"
 	rows, err := s.db.Query(`
-		SELECT id, title, content, created_at, updated_at
+		SELECT id, title, content, created_at, updated_at, starred
 		FROM notes
 		WHERE title LIKE ? ESCAPE '\' OR content LIKE ? ESCAPE '\'
 		ORDER BY (title LIKE ? ESCAPE '\') DESC, updated_at DESC

@@ -2,17 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import {
   CornerDownRight,
   Link2,
+  ListTree,
   Plus,
 } from "lucide-react";
 import { NoteService } from "../../../bindings/sharknote";
 import type { Backlink, LinkInfo } from "../../../bindings/sharknote";
 import { cn } from "../../lib/utils";
+import type { HeadingEntry } from "../../lib/markdown";
 
 interface LinkPanelProps {
   noteId: number;
   refreshKey: number;
   onOpenNote: (id: number) => void;
   onCreateNote: (title: string) => void;
+  /** h1–h3 outline of the open note. */
+  outline: HeadingEntry[];
+  panelTab: "links" | "outline";
+  onPanelTabChange: (tab: "links" | "outline") => void;
+  onJumpToHeading: (index: number) => void;
 }
 
 export function LinkPanel({
@@ -20,6 +27,10 @@ export function LinkPanel({
   refreshKey,
   onOpenNote,
   onCreateNote,
+  outline,
+  panelTab,
+  onPanelTabChange,
+  onJumpToHeading,
 }: LinkPanelProps) {
   const [outgoing, setOutgoing] = useState<LinkInfo[]>([]);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
@@ -48,12 +59,68 @@ export function LinkPanel({
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/40">
       <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          <Link2 className="size-3.5" />
-          Links & backlinks
+        <div className="flex flex-1 items-center gap-0.5 rounded-lg border border-border bg-secondary/40 p-0.5">
+          <button
+            onClick={() => onPanelTabChange("links")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition",
+              panelTab === "links"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Link2 className="size-3.5" />
+            Links
+          </button>
+          <button
+            onClick={() => onPanelTabChange("outline")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition",
+              panelTab === "outline"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ListTree className="size-3.5" />
+            Outline
+          </button>
         </div>
       </div>
 
+      {panelTab === "outline" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <Section
+            title="Outline"
+            count={outline.length}
+            empty={
+              <p className="text-[11.5px] leading-relaxed text-muted-foreground/80">
+                No headings yet. Add a <span className="text-foreground"># Heading</span> to
+                build the outline.
+              </p>
+            }
+          >
+            {outline.map((h, i) => (
+              <button
+                key={i}
+                onClick={() => onJumpToHeading(i)}
+                title={`Jump to “${h.text}”`}
+                className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-[12.5px] text-foreground/85 transition-colors hover:bg-accent/60 hover:text-(--link-strong)"
+                style={{ paddingLeft: 8 + (h.level - 1) * 14 }}
+              >
+                <span
+                  className={cn(
+                    "mr-1.5 text-[10px] font-semibold text-muted-foreground/50",
+                    h.level === 1 && "font-bold"
+                  )}
+                >
+                  H{h.level}
+                </span>
+                {h.text}
+              </button>
+            ))}
+          </Section>
+        </div>
+      ) : (
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {/* Outgoing links */}
         <Section
@@ -134,6 +201,7 @@ export function LinkPanel({
           ))}
         </Section>
       </div>
+      )}
 
       {!loaded && (
         <div className="pointer-events-none absolute inset-0 animate-pulse bg-card/20" />

@@ -158,6 +158,13 @@ export function TakePendingOpenedNote(): $CancellablePromise<number> {
 }
 
 /**
+ * ToggleStar flips a note's bookmarked state and returns the new value.
+ */
+export function ToggleStar(id: number): $CancellablePromise<boolean> {
+    return $Call.ByID(2432431669, id);
+}
+
+/**
  * UpdateNote saves the title and content of a note, re-scanning its wiki links.
  */
 export function UpdateNote(id: number, title: string, content: string): $CancellablePromise<$models.Note | null> {

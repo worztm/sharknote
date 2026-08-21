@@ -66,6 +66,11 @@ func (s *NoteService) DeleteNote(id int64) error {
 	return s.store.DeleteNote(id)
 }
 
+// ToggleStar flips a note's bookmarked state and returns the new value.
+func (s *NoteService) ToggleStar(id int64) (bool, error) {
+	return s.store.ToggleStar(id)
+}
+
 // SearchNotes returns notes whose title or content matches the query.
 func (s *NoteService) SearchNotes(query string) ([]NoteSummary, error) {
 	return s.store.SearchNotes(query)

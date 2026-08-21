@@ -11,6 +11,8 @@ import {
   PanelRight,
   PencilLine,
   Save,
+  Scissors,
+  Star,
   Trash2,
 } from "lucide-react";
 import DOMPurify from "dompurify";
@@ -18,9 +20,11 @@ import { NoteService } from "../../../bindings/sharknote";
 import type { Note, NoteSummary } from "../../../bindings/sharknote";
 import { Browser } from "@wailsio/runtime";
 import {
+  extractHeadings,
   findWikiQuery,
   looksLikeHtml,
   markdownToEditorHtml,
+  renderMermaidBlocks,
   renderRichContent,
   stripHtml,
 } from "../../lib/markdown";
@@ -47,6 +51,8 @@ interface EditorViewProps {
   onDuplicateNote: (noteId: number) => void;
   /** Shows a short info toast at the bottom of the window. */
   onToast: (text: string) => void;
+  /** Star state changed — App updates the sidebar list. */
+  onStarChanged?: (id: number, starred: boolean) => void;
   /** Bumped after an external rename so the header title refreshes. */
   titleReloadKey?: number;
   /** How fresh notes open: "preview" (rendered) or "edit". */
@@ -260,6 +266,7 @@ export function EditorView({
   onSaveNoteAs,
   onDuplicateNote,
   onToast,
+  onStarChanged,
   titleReloadKey,
   defaultView,
   autosaveDelay,
@@ -273,6 +280,7 @@ export function EditorView({
   // in the user's preferred default view.
   const [preview, setPreview] = useState(defaultView !== "edit");
   const [panelOpen, setPanelOpen] = useState(true);
+  const [panelTab, setPanelTab] = useState<"links" | "outline">("links");
   const [linkRefreshKey, setLinkRefreshKey] = useState(0);
 
   // Wiki-link autocomplete
@@ -784,8 +792,107 @@ export function EditorView({
   }, []);
 
   // Click handling for rendered wiki links in preview mode.
+  // Mermaid diagrams render asynchronously once the preview is on screen.
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // Clicking a task checkbox in EDIT mode: the browser toggles it natively,
+  // we just need to sync + save afterwards.
+  useEffect(() => {
+    const el = editorRef.current;
+    if (preview || !el) return;
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("input.task-checkbox")) {
+        setTimeout(syncFromEditor, 0);
+      }
+    };
+    el.addEventListener("click", onClick);
+    return () => el.removeEventListener("click", onClick);
+  }, [preview, syncFromEditor]);
+
+  /** Persists a task-checkbox toggle made in PREVIEW mode. */
+  const handlePreviewCheckbox = useCallback(
+    (input: HTMLInputElement) => {
+      input.checked = !input.checked;
+      const root = previewRef.current;
+      if (!root) return;
+      contentRef.current = root.innerHTML;
+      setContent(root.innerHTML);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  /** Bookmarks / unbookmarks the note; App refreshes the sidebar list. */
+  const handleToggleStar = useCallback(async () => {
+    if (!note) return;
+    try {
+      const starred = await NoteService.ToggleStar(note.id);
+      setNote((n) => (n ? { ...n, starred } : n));
+      onStarChanged?.(note.id, starred);
+      onToast(starred ? "Added to Starred" : "Removed from Starred");
+    } catch (err) {
+      console.error("ToggleStar failed", err);
+    }
+  }, [note, onStarChanged, onToast]);
+
+  /** Scrolls the live note body to the nth heading of the outline. */
+  const jumpToHeading = useCallback(
+    (index: number) => {
+      const scope = preview ? previewRef.current : editorRef.current;
+      if (!scope) return;
+      const headings = scope.querySelectorAll("h1, h2, h3");
+      headings[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [preview]
+  );
+
+  /** Note Composer: extracts the selected text into a new linked note. */
+  const handleExtractSelection = useCallback(async () => {
+    const selText = window.getSelection()?.toString() ?? "";
+    if (!selText.trim()) {
+      onToast("Select some text first, then extract it");
+      return;
+    }
+    const clean = selText.trim();
+    const firstLine = clean.split(/\r?\n/)[0].replace(/<[^>]*>/g, "").trim();
+    const newTitle = (firstLine || "Extracted note").slice(0, 60);
+    try {
+      const created = await NoteService.CreateNote(
+        newTitle,
+        `<p>${escapeHtmlBasic(clean).replace(/\r?\n/g, "<br>")}</p>`
+      );
+      // In edit mode, swap the selection for a link to the new note.
+      if (!preview && editorRef.current) {
+        const sel = window.getSelection();
+        if (savedRangeRef.current && sel) {
+          sel.removeAllRanges();
+          sel.addRange(savedRangeRef.current.cloneRange());
+        }
+        try {
+          document.execCommand("insertText", false, `[[${newTitle}]]`);
+        } catch {
+          /* selection may be gone — the new note still exists */
+        }
+        syncFromEditor();
+      }
+      onToast(`Extracted to “${newTitle}”`);
+      if (created) onOpenNote(created.id);
+    } catch (err) {
+      console.error("extract failed", err);
+      onToast("Couldn't create the extracted note");
+    }
+  }, [onOpenNote, onToast, preview, syncFromEditor]);
+
   const handlePreviewClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // Task checkbox toggle (persisted like any other edit)
+      const cb = (e.target as HTMLElement).closest(
+        "input.task-checkbox"
+      ) as HTMLInputElement | null;
+      if (cb) {
+        handlePreviewCheckbox(cb);
+        return;
+      }
       const target = (e.target as HTMLElement).closest(
         "[data-wiki-target]"
       ) as HTMLElement | null;
@@ -820,13 +927,23 @@ export function EditorView({
         void Browser.OpenURL(anchor.getAttribute("href") ?? "");
       }
     },
-    [notes, onOpenNote, onCreateNote]
+    [notes, onOpenNote, onCreateNote, handlePreviewCheckbox]
   );
 
   const previewHtml = useMemo(() => renderRichContent(content), [content]);
   const plainText = useMemo(() => stripHtml(content), [content]);
   const words = wordCount(plainText);
   const chars = plainText.length;
+  const outline = useMemo(() => extractHeadings(content), [content]);
+
+  // Mermaid: kick off async diagram rendering after the preview mounts.
+  useEffect(() => {
+    if (!preview || !previewHtml.includes("data-mermaid")) return;
+    const root = previewRef.current;
+    if (!root) return;
+    const dark = document.documentElement.classList.contains("dark");
+    void renderMermaidBlocks(root, dark);
+  }, [preview, previewHtml]);
 
   if (!note) {
     return (
@@ -852,7 +969,7 @@ export function EditorView({
               placeholder="Untitled"
               className="w-full border-none bg-transparent text-[26px] font-semibold leading-tight tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
             />
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span>Created {fullDate(note.createdAt)}</span>
               <span className="text-border">•</span>
               <span>{words} words</span>
@@ -865,6 +982,19 @@ export function EditorView({
           </div>
 
           <div className="flex items-center gap-1.5 pt-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              title={note.starred ? "Remove bookmark" : "Bookmark note"}
+              onClick={() => void handleToggleStar()}
+            >
+              <Star
+                className={cn(
+                  "size-4 transition-colors",
+                  note.starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground"
+                )}
+              />
+            </Button>
             <div className="flex items-center gap-0.5 rounded-xl border border-border bg-secondary/40 p-0.5">
               <Button
                 variant={preview ? "secondary" : "ghost"}
@@ -914,6 +1044,16 @@ export function EditorView({
                     label="Duplicate note"
                     onClick={() => runAction(() => onDuplicateNote(note.id))}
                   />
+                  <MenuRow
+                    icon={Scissors}
+                    label="Extract selection to note"
+                    onClick={() => runAction(() => void handleExtractSelection())}
+                  />
+                  <MenuRow
+                    icon={Star}
+                    label={note.starred ? "Remove bookmark" : "Bookmark note"}
+                    onClick={() => runAction(() => void handleToggleStar())}
+                  />
                   <div className="mx-1 my-1 h-px bg-border" />
                   <MenuRow
                     icon={PencilLine}
@@ -953,6 +1093,7 @@ export function EditorView({
         <div ref={wrapRef} className="relative min-h-0 flex-1">
           {preview ? (
             <div
+              ref={previewRef}
               className="md-body h-full overflow-y-auto px-8 py-6 lg:px-12"
               onClick={handlePreviewClick}
               dangerouslySetInnerHTML={{ __html: previewHtml }}
@@ -1052,13 +1193,17 @@ export function EditorView({
         </footer>
       </div>
 
-      {/* ---------- Links & backlinks panel ---------- */}
+      {/* ---------- Links / outline panel ---------- */}
       {panelOpen && (
         <LinkPanel
           noteId={noteId}
           refreshKey={linkRefreshKey}
           onOpenNote={onOpenNote}
           onCreateNote={onCreateNote}
+          outline={outline}
+          panelTab={panelTab}
+          onPanelTabChange={setPanelTab}
+          onJumpToHeading={jumpToHeading}
         />
       )}
 

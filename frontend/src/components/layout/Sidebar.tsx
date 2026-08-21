@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpDown, FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine } from "lucide-react";
+import { ArrowUpDown, FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine, Star } from "lucide-react";
 import type { NoteSummary } from "../../../bindings/sharknote";
 import { Logo } from "../../App";
 import { relativeTime } from "../../lib/time";
@@ -101,13 +101,23 @@ export function Sidebar({
   }, [notes, query]);
 
   const groups = useMemo(() => {
+    // Starred notes float to the top in their own group (and leave the
+    // date/alphabet groups so nothing appears twice).
+    const starred = filtered.filter((n) => n.starred);
+    const unstarred = filtered.filter((n) => !n.starred);
+    let body: Group[];
     if (sortMode === "az") {
-      const sorted = [...filtered].sort((a, b) =>
+      const sorted = [...unstarred].sort((a, b) =>
         a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
       );
-      return [{ label: `All notes (${sorted.length})`, items: sorted }];
+      body = [{ label: `All notes (${sorted.length})`, items: sorted }];
+    } else {
+      body = groupNotes(unstarred);
     }
-    return groupNotes(filtered);
+    if (starred.length > 0) {
+      body = [{ label: "Starred", items: starred }, ...body];
+    }
+    return body;
   }, [filtered, sortMode]);
 
   return (
@@ -240,6 +250,9 @@ export function Sidebar({
                                 : "text-sidebar-foreground/90"
                             )}
                           >
+                            {n.starred && (
+                              <Star className="mr-1 inline size-3 fill-amber-400 text-amber-400" />
+                            )}
                             {n.title}
                           </span>
                           <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground/70">

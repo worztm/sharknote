@@ -211,19 +211,26 @@ export default function App() {
 
   const handleSaved = useCallback((note: Note) => {
     setNotes((prev) => {
+      const old = prev.find((n) => n.id === note.id);
       const rest = prev.filter((n) => n.id !== note.id);
       const summary: NoteSummary = {
         id: note.id,
         title: note.title,
-        excerpt: "",
+        excerpt: old?.excerpt ?? "",
         createdAt: note.createdAt,
         updatedAt: note.updatedAt,
+        starred: old?.starred ?? false,
       };
       return [summary, ...rest];
     });
     setTabs((prev) =>
       prev.map((t) => (t.kind === "note" && t.noteId === note.id ? { ...t, title: note.title } : t))
     );
+  }, []);
+
+  /** Star toggled in the editor — sync the sidebar list without a reload. */
+  const handleStarChanged = useCallback((id: number, starred: boolean) => {
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, starred } : n)));
   }, []);
 
   const handleDirtyChange = useCallback((noteId: number, dirty: boolean) => {
@@ -675,6 +682,7 @@ export default function App() {
             onSaveNoteAs={handleSaveNoteAs}
             onDuplicateNote={handleDuplicateNote}
             onToast={showToast}
+            onStarChanged={handleStarChanged}
             titleReloadKey={titleReloadKey}
             defaultView={settings.defaultView}
             autosaveDelay={settings.autosaveDelay}
