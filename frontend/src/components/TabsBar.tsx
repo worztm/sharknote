@@ -51,6 +51,10 @@ export function TabsBar({ tabs, activeKey, onActivate, onClose, onNewTab }: Tabs
               tab.dirty ? " (unsaved changes)" : ""
             }`}
           >
+            {/* Active-tab accent line along the top edge */}
+            {active && (
+              <span className="absolute inset-x-0 top-0 h-[2px] bg-(--accent-ink)" />
+            )}
             {tab.kind === "graph" ? (
               <Waypoints
                 className="size-3.5 shrink-0"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  CalendarDays,
   FilePlus2,
   FileText,
   FolderOpen,
@@ -35,6 +36,8 @@ interface CommandPaletteProps {
   onOpenFolder: () => void;
   /** Save the open note as a file via the native save dialog. */
   onSaveNoteAs: (id: number) => void;
+  /** Opens today's daily note, creating it if needed. */
+  onOpenDailyNote: () => void;
   onOpenSettings: () => void;
 }
 
@@ -50,6 +53,7 @@ export function CommandPalette({
   onOpenFiles,
   onOpenFolder,
   onSaveNoteAs,
+  onOpenDailyNote,
   onOpenSettings,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
@@ -103,6 +107,19 @@ export function CommandPalette({
                   — “{query.trim()}”
                 </span>
               )}
+            </span>
+          </CommandItem>
+          <CommandItem
+            value={`__daily__${query}`}
+            onSelect={onOpenDailyNote}
+          >
+            <CalendarDays className="size-4" style={{ color: "var(--link-strong)" }} />
+            <span>
+              Open daily note
+              <span className="text-muted-foreground">
+                {" "}
+                — {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+              </span>
             </span>
           </CommandItem>
           <CommandItem value="__openfiles__" onSelect={onOpenFiles}>

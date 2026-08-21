@@ -251,7 +251,9 @@ func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, err
 	}
 	if int32(hr) < 0 {
 		return nil, hrError(hr)
-	}	var paths []string
+	}
+
+	var paths []string
 	if folderMode {
 		// Single selection.
 		var item unsafe.Pointer

@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowUpDown, FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine } from "lucide-react";
 import type { NoteSummary } from "../../bindings/sharknote";
 import { Logo } from "../App";
 import { relativeTime } from "../lib/time";
@@ -28,6 +28,16 @@ interface SidebarProps {
 }
 
 type Group = { label: string; items: NoteSummary[] };
+
+type SortMode = "recent" | "az";
+
+function loadSortMode(): SortMode {
+  try {
+    return localStorage.getItem("sharknote.sidebarSort") === "az" ? "az" : "recent";
+  } catch {
+    return "recent";
+  }
+}
 
 function groupNotes(notes: NoteSummary[]): Group[] {
   const now = Date.now();
@@ -66,6 +76,20 @@ export function Sidebar({
   vaultPath,
   view,
 }: SidebarProps) {
+  // Sidebar ordering: recently-updated (grouped by day) or alphabetical.
+  // Persisted so the choice survives restarts.
+  const [sortMode, setSortMode] = useState<SortMode>(loadSortMode);
+  const toggleSort = () =>
+    setSortMode((m) => {
+      const next: SortMode = m === "recent" ? "az" : "recent";
+      try {
+        localStorage.setItem("sharknote.sidebarSort", next);
+      } catch {
+        /* private mode etc. — sorting still works for this session */
+      }
+      return next;
+    });
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return notes;
@@ -76,7 +100,15 @@ export function Sidebar({
     );
   }, [notes, query]);
 
-  const groups = useMemo(() => groupNotes(filtered), [filtered]);
+  const groups = useMemo(() => {
+    if (sortMode === "az") {
+      const sorted = [...filtered].sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+      );
+      return [{ label: `All notes (${sorted.length})`, items: sorted }];
+    }
+    return groupNotes(filtered);
+  }, [filtered, sortMode]);
 
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-sidebar">
@@ -138,6 +170,25 @@ export function Sidebar({
       </div>
 
       {/* Note list */}
+      {notes.length > 0 && (
+        <div className="flex items-center justify-between px-4 pb-1">
+          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70 tabular-nums">
+            {filtered.length} note{filtered.length === 1 ? "" : "s"}
+          </span>
+          <button
+            onClick={toggleSort}
+            title={
+              sortMode === "recent"
+                ? "Sorted by recently updated — click to sort A–Z"
+                : "Sorted A–Z — click to sort by recent activity"
+            }
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <ArrowUpDown className="size-3" />
+            {sortMode === "recent" ? "Recent" : "A–Z"}
+          </button>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {filtered.length === 0 ? (
           <div className="px-3 py-8 text-center text-xs leading-relaxed text-muted-foreground">

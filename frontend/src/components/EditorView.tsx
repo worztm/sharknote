@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  ClipboardCopy,
+  CopyPlus,
   Eye,
   FilePenLine,
   Link2,
@@ -25,13 +27,6 @@ import {
 import { fullDate, wordCount } from "../lib/time";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { FormatMenu, type FormatCommand } from "./FormatMenu";
 import { LinkPanel } from "./LinkPanel";
 
@@ -48,6 +43,10 @@ interface EditorViewProps {
   onRequestRename: (currentTitle: string) => void;
   /** Save the note as a file wherever the user picks (native dialog). */
   onSaveNoteAs: (noteId: number) => void;
+  /** Duplicates the note (full content copy) and opens it in a new tab. */
+  onDuplicateNote: (noteId: number) => void;
+  /** Shows a short info toast at the bottom of the window. */
+  onToast: (text: string) => void;
   /** Bumped after an external rename so the header title refreshes. */
   titleReloadKey?: number;
   /** How fresh notes open: "preview" (rendered) or "edit". */
@@ -78,6 +77,33 @@ const WBR = '<wbr>';
 /** Minimal HTML escaping for text that is about to be inserted as HTML. */
 function escapeHtmlBasic(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Copies text to the clipboard with a synchronous fallback: the async
+ * Clipboard API can be unavailable or rejected inside webviews, so we retry
+ * the classic hidden-textarea + execCommand route before giving up.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
 }
 
 /** Inserts <wbr> after every LONG_RUN_BREAK chars inside unbroken runs. */
@@ -232,6 +258,8 @@ export function EditorView({
   onCreateNote,
   onRequestRename,
   onSaveNoteAs,
+  onDuplicateNote,
+  onToast,
   titleReloadKey,
   defaultView,
   autosaveDelay,
@@ -254,6 +282,36 @@ export function EditorView({
 
   // Right-click formatting menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // ⋯ actions popover (hand-rolled like FormatMenu — portals/dropdowns from
+  // Radix proved unreliable inside the webview, this pattern always works).
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
+
+  // Close the actions popover on outside click or Escape.
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
+        setActionsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsOpen]);
+
+  /** Runs an action from the ⋯ menu: closes it first, then fires. */
+  const runAction = useCallback((fn: () => void) => {
+    setActionsOpen(false);
+    fn();
+  }, []);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -357,8 +415,10 @@ export function EditorView({
       }
     } catch (err) {
       console.error("UpdateNote failed", err);
+      // Keep the note marked dirty (and the tab dot on): the edit didn't
+      // reach the database, so pretending it's saved would risk data loss.
       dirtyRef.current = true;
-      setSaveStateSafe("saved");
+      setSaveStateSafe("dirty");
     }
   }, [noteId, onSaved]);
 
@@ -375,6 +435,18 @@ export function EditorView({
     }
     onSaveNoteAs(noteId);
   }, [dirtyRef, saveNow, onSaveNoteAs, noteId]);
+
+  // Copies [[Title]] so the note can be linked from any other note.
+  const handleCopyWikiLink = useCallback(async () => {
+    const ok = await copyToClipboard(`[[${titleRef.current || note?.title || ""}]]`);
+    onToast(ok ? "Wiki link copied to clipboard" : "Couldn't access the clipboard");
+  }, [note, onToast]);
+
+  // Copies the note's plain text (formatting stripped) to the clipboard.
+  const handleCopyContent = useCallback(async () => {
+    const ok = await copyToClipboard(stripHtml(contentRef.current));
+    onToast(ok ? "Note text copied to clipboard" : "Couldn't access the clipboard");
+  }, [onToast]);
 
   const scheduleSave = useCallback(() => {
     dirtyRef.current = true;
@@ -809,35 +881,69 @@ export function EditorView({
             >
               <PanelRight className="size-4" />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" title="More">
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onSelect={() => onRequestRename(note.title)}>
-                  <PencilLine className="size-4" />
-                  Rename note
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void handleSaveAs()}>
-                  <Save className="size-4" />
-                  Save as file…
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setPreview((p) => !p)}>
-                  <Eye className="size-4" />
-                  {preview ? "Edit mode" : "Preview mode"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onSelect={() => onRequestDelete(note.id)}
+            <div className="relative" ref={actionsRef}>
+              <Button
+                variant={actionsOpen ? "secondary" : "ghost"}
+                size="icon"
+                title="More actions"
+                aria-haspopup="menu"
+                aria-expanded={actionsOpen}
+                onClick={() => setActionsOpen((o) => !o)}
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+              {actionsOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-border bg-popover/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
                 >
-                  <Trash2 className="size-4" />
-                  Delete note
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <MenuRow
+                    icon={Link2}
+                    label="Copy wiki link"
+                    onClick={() => runAction(() => void handleCopyWikiLink())}
+                  />
+                  <MenuRow
+                    icon={ClipboardCopy}
+                    label="Copy note text"
+                    onClick={() => runAction(() => void handleCopyContent())}
+                  />
+                  <MenuRow
+                    icon={CopyPlus}
+                    label="Duplicate note"
+                    onClick={() => runAction(() => onDuplicateNote(note.id))}
+                  />
+                  <div className="mx-1 my-1 h-px bg-border" />
+                  <MenuRow
+                    icon={PencilLine}
+                    label="Rename note"
+                    onClick={() => runAction(() => onRequestRename(note.title))}
+                  />
+                  <MenuRow
+                    icon={Save}
+                    label="Save as file…"
+                    onClick={() => runAction(() => void handleSaveAs())}
+                  />
+                  <MenuRow
+                    icon={preview ? FilePenLine : Eye}
+                    label={preview ? "Edit mode" : "Preview mode"}
+                    hint="Ctrl+E"
+                    onClick={() => runAction(() => setPreview((p) => !p))}
+                  />
+                  <MenuRow
+                    icon={PanelRight}
+                    label={panelOpen ? "Hide links panel" : "Show links panel"}
+                    onClick={() => runAction(() => setPanelOpen((p) => !p))}
+                  />
+                  <div className="mx-1 my-1 h-px bg-border" />
+                  <MenuRow
+                    icon={Trash2}
+                    label="Delete note"
+                    destructive
+                    onClick={() => runAction(() => onRequestDelete(note.id))}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -937,6 +1043,7 @@ export function EditorView({
           <span className="text-border">|</span>
           <span className="tabular-nums">{words} words</span>
           <span className="tabular-nums">{chars} chars</span>
+          <span className="tabular-nums">~{Math.max(1, Math.round(words / 200))} min read</span>
           <span className="ml-auto hidden text-muted-foreground/60 sm:block">
             Tip: type <kbd className="rounded border border-border bg-secondary px-1 text-[10px]">[[</kbd> to link a note · right-click text to format it
           </span>
@@ -965,5 +1072,38 @@ export function EditorView({
 
       {/* ---------- Rename handled app-wide (App-level dialog) ---------- */}
     </div>
+  );
+}
+
+/** One full-width row in the ⋯ actions menu. */
+function MenuRow({
+  icon: Icon,
+  label,
+  hint,
+  destructive,
+  onClick,
+}: {
+  icon: typeof Link2;
+  label: string;
+  hint?: string;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12.5px] transition-colors",
+        destructive
+          ? "text-destructive hover:bg-destructive/15"
+          : "text-foreground/85 hover:bg-accent"
+      )}
+    >
+      <Icon className={cn("size-4 shrink-0", destructive ? "text-destructive/80" : "text-muted-foreground")} />
+      <span className="flex-1">{label}</span>
+      {hint && <span className="text-[10px] tabular-nums text-muted-foreground/60">{hint}</span>}
+    </button>
   );
 }

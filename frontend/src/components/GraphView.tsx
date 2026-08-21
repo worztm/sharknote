@@ -8,8 +8,13 @@ import {
 import {
   ArrowLeft,
   Loader2,
+  Maximize2,
   RefreshCw,
+  Search,
   Waypoints,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   forceCenter,
@@ -469,8 +474,13 @@ export function GraphView({
             ctx.stroke();
           }
 
-          // Label
-          const labelMe = (showLabels || isHover || isActive) && bp > 0.45;
+          // Label — on large zoomed-out graphs only label well-connected
+          // nodes up front; hovering still reveals any label.
+          const labelMe =
+            (isHover ||
+              isActive ||
+              (showLabels && (nodes.length <= 60 || n.linkCount >= 2))) &&
+            bp > 0.45;
           if (labelMe) {
             const labelDim = dimmed && !connected;
             ctx.font = labelFont;
@@ -503,6 +513,69 @@ export function GraphView({
   }, [palette]);
 
   // Fit camera to the graph once it has spread out, focusing the active note.
+  /** Computes a camera transform that frames the whole graph, biased toward
+   *  the active note when one exists. */
+  const computeFit = useCallback((): Transform | null => {
+    const nodes = nodesRef.current;
+    if (nodes.length === 0) return null;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes) {
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
+    }
+    const w = Math.max(maxX - minX, 10);
+    const h = Math.max(maxY - minY, 10);
+    const k = Math.max(0.12, Math.min(rect.width / (w + 160), rect.height / (h + 160), 1.6));
+    const focus = activeIdRef.current;
+    const target = focus != null ? nodes.find((n) => n.id === focus) ?? null : null;
+    const cx = target ? target.x : (minX + maxX) / 2;
+    const cy = target ? target.y : (minY + maxY) / 2;
+    return { k, x: rect.width / 2 - cx * k, y: rect.height / 2 - cy * k };
+  }, []);
+
+  /** Animates the camera to frame the whole graph. */
+  const fitView = useCallback(() => {
+    const to = computeFit();
+    if (!to) return;
+    fitAnimRef.current = {
+      from: { ...transformRef.current },
+      to,
+      start: performance.now(),
+    };
+  }, [computeFit]);
+
+  /** Zooms around the canvas centre by a multiplicative factor. */
+  const zoomBy = useCallback((factor: number) => {
+    fitAnimRef.current = null;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const t = transformRef.current;
+    const px = rect.width / 2;
+    const py = rect.height / 2;
+    const k2 = Math.min(4, Math.max(0.12, t.k * factor));
+    t.x = px - ((px - t.x) * k2) / t.k;
+    t.y = py - ((py - t.y) * k2) / t.k;
+    t.k = k2;
+  }, []);
+
+  /** Glides the camera so the given node sits centred and legible. */
+  const focusNode = useCallback((id: number) => {
+    const n = nodesRef.current.find((m) => m.id === id);
+    if (!n) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const k = Math.max(transformRef.current.k, 1.15);
+    fitAnimRef.current = {
+      from: { ...transformRef.current },
+      to: { k, x: rect.width / 2 - n.x * k, y: rect.height / 2 - n.y * k },
+      start: performance.now(),
+    };
+  }, []);
+
   useEffect(() => {
     const sim = simRef.current;
     if (!sim) return;
@@ -511,36 +584,12 @@ export function GraphView({
       if (sim.alpha() > 0.35) return;
       const nodes = nodesRef.current;
       if (nodes.length === 0) return;
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const n of nodes) {
-        minX = Math.min(minX, n.x);
-        maxX = Math.max(maxX, n.x);
-        minY = Math.min(minY, n.y);
-        maxY = Math.max(maxY, n.y);
-      }
-      const w = Math.max(maxX - minX, 10);
-      const h = Math.max(maxY - minY, 10);
-      const k = Math.max(0.12, Math.min(rect.width / (w + 160), rect.height / (h + 160), 1.6));
-
-      const focus = activeIdRef.current;
-      const target =
-        focus != null && nodes.some((n) => n.id === focus)
-          ? nodes.find((n) => n.id === focus)!
-          : null;
-      const cx = target ? target.x : (minX + maxX) / 2;
-      const cy = target ? target.y : (minY + maxY) / 2;
-
+      const to = computeFit();
+      if (!to) return;
       // Animate the camera rather than snapping
       fitAnimRef.current = {
         from: { ...transformRef.current },
-        to: {
-          k,
-          x: rect.width / 2 - cx * k,
-          y: rect.height / 2 - cy * k,
-        },
+        to,
         start: performance.now(),
       };
       fittedRef.current = true;
@@ -549,7 +598,7 @@ export function GraphView({
     return () => {
       sim.on("tick", null);
     };
-  }, [data]);
+  }, [data, computeFit]);
 
   // --- Pointer interactions ------------------------------------------------
 
@@ -627,12 +676,16 @@ export function GraphView({
       const node = hitTest(w.x, w.y);
       hoveredRef.current = node ? node.id : null;
       e.currentTarget.style.cursor = node ? "pointer" : "grab";
-      // Floating chip
+      // Floating chip — clamped on both axes so it never leaves the canvas
       const chip = chipRef.current;
       if (chip) {
         if (node) {
           chip.style.opacity = "1";
-          chip.style.transform = `translate(${Math.min(px + 14, rect.width - 200)}px, ${py - 40}px)`;
+          const cw = chip.offsetWidth || 190;
+          const ch = chip.offsetHeight || 44;
+          const cx = Math.max(8, Math.min(px + 14, rect.width - cw - 8));
+          const cy = py - ch - 10 > 8 ? py - ch - 10 : py + 18;
+          chip.style.transform = `translate(${cx}px, ${cy}px)`;
           chip.querySelector("[data-chip-title]")!.textContent = node.title;
           chip.querySelector("[data-chip-meta]")!.textContent =
             `${node.linkCount} link${node.linkCount === 1 ? "" : "s"}`;
@@ -673,6 +726,36 @@ export function GraphView({
     t.k = k2;
   }, []);
 
+  // Double-click on empty canvas reframes the whole graph.
+  const onDoubleClickCanvas = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hitTest(w.x, w.y)) fitView();
+    },
+    [toWorld, hitTest, fitView]
+  );
+
+  // --- Node search ---------------------------------------------------------
+
+  const [search, setSearch] = useState("");
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || !data) return [];
+    return (data.nodes ?? [])
+      .filter((n: GraphNode) => n.title.toLowerCase().includes(q))
+      .slice(0, 7);
+  }, [search, data]);
+
+  const selectSearchResult = useCallback(
+    (id: number) => {
+      hoveredRef.current = id;
+      focusNode(id);
+      setSearch("");
+    },
+    [focusNode]
+  );
+
   const nodeCount = data?.nodes?.length ?? 0;
   const edgeCount = data?.edges?.length ?? 0;
 
@@ -689,6 +772,7 @@ export function GraphView({
           if (chipRef.current) chipRef.current.style.opacity = "0";
         }}
         onWheel={onWheel}
+        onDoubleClick={onDoubleClickCanvas}
       />
 
       {/* Subtle vignette for depth */}
@@ -738,9 +822,86 @@ export function GraphView({
         </button>
       </div>
 
+      {/* Node search */}
+      <div className="absolute right-4 top-4 z-20 w-60">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card/80 px-3 py-2 shadow-lg shadow-black/30 backdrop-blur">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSearch("");
+              if (e.key === "Enter" && searchResults.length > 0) {
+                selectSearchResult(searchResults[0].id);
+              }
+            }}
+            placeholder="Find a note…"
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/70"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              title="Clear"
+              className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        {searchResults.length > 0 && (
+          <div className="mt-1 overflow-hidden rounded-xl border border-border bg-popover/95 p-1 shadow-xl shadow-black/40 backdrop-blur">
+            {searchResults.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => selectSearchResult(n.id)}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
+              >
+                <Waypoints className="size-3 shrink-0" style={{ color: palette.accent }} />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
+                  {n.title}
+                </span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {n.linkCount}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {search.trim() && searchResults.length === 0 && data && (
+          <div className="mt-1 rounded-xl border border-border bg-popover/95 px-3 py-2 text-[12px] text-muted-foreground shadow-xl backdrop-blur">
+            No notes match “{search.trim()}”.
+          </div>
+        )}
+      </div>
+
+      {/* Zoom controls */}
+      <div className="absolute bottom-12 right-4 z-20 flex flex-col overflow-hidden rounded-xl border border-border bg-card/80 shadow-lg shadow-black/30 backdrop-blur">
+        <button
+          onClick={() => zoomBy(1.25)}
+          title="Zoom in"
+          className="flex size-9 items-center justify-center text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <ZoomIn className="size-4" />
+        </button>
+        <button
+          onClick={() => zoomBy(0.8)}
+          title="Zoom out"
+          className="flex size-9 items-center justify-center border-t border-border text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <ZoomOut className="size-4" />
+        </button>
+        <button
+          onClick={fitView}
+          title="Fit graph to view (double-click canvas)"
+          className="flex size-9 items-center justify-center border-t border-border text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <Maximize2 className="size-4" />
+        </button>
+      </div>
+
       {/* Hint */}
       <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border bg-card/70 px-4 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
-        Drag to pan · Scroll to zoom · Drag a node to rearrange · Click to open
+        Drag to pan · Scroll to zoom · Drag a node to rearrange · Click to open · Double-click to fit
       </div>
 
       {/* Loading / empty / error states */}

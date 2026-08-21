@@ -48,11 +48,28 @@ export default function App() {
   } | null>(null);
   // Bumped after every rename so the editor re-fetches the note's title.
   const [titleReloadKey, setTitleReloadKey] = useState(0);
-  // Transient “Saved to …” toast shown after a Save as… export.
-  const [saveToast, setSaveToast] = useState<{ text: string; key: number } | null>(null);
+  // Transient toast shown after a Save as… export or a copy action.
+  const [saveToast, setSaveToast] = useState<{
+    text: string;
+    key: number;
+    kind?: "saved" | "info";
+  } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   // Tab that was active before the graph was opened (for its Back button).
   const lastNoteKeyRef = useRef<string | null>(null);
+  // Most recently active note id — drives the graph's "active node" glow.
+  const [lastNoteId, setLastNoteId] = useState<number | null>(null);
+
+  // Remember the most recent note tab: the graph's Back button returns there,
+  // its canvas highlights that node as active, and clicking graph nodes
+  // reuses this tab instead of spawning new ones.
+  useEffect(() => {
+    const t = tabs.find((x) => x.key === activeKey);
+    if (t?.kind === "note" && t.noteId != null) {
+      lastNoteKeyRef.current = t.key;
+      setLastNoteId(t.noteId);
+    }
+  }, [activeKey, tabs]);
 
   const refreshNotes = useCallback(async () => {
     try {
@@ -124,6 +141,19 @@ export default function App() {
               t.key === active.key ? { ...t, noteId, title, dirty: false } : t
             )
           );
+          return;
+        }
+        // The active tab isn't a note (graph view, or nothing open): reuse
+        // the most recent note tab instead of spawning a fresh one per
+        // click, so browsing from the graph never litters the tab bar.
+        const lastKey = lastNoteKeyRef.current;
+        if (lastKey && tabs.some((t) => t.key === lastKey)) {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.key === lastKey ? { ...t, noteId, title, dirty: false } : t
+            )
+          );
+          setActiveKey(lastKey);
           return;
         }
       }
@@ -249,12 +279,41 @@ export default function App() {
     try {
       const res = await NoteService.SaveNoteAs(noteId);
       if (res?.savedPath) {
-        setSaveToast({ text: res.savedPath, key: Date.now() });
+        setSaveToast({ text: res.savedPath, key: Date.now(), kind: "saved" });
       }
     } catch (err) {
       console.error("SaveNoteAs failed", err);
     }
   }, []);
+
+  // Shows a short info toast at the bottom of the window (copy feedback etc.).
+  const showToast = useCallback((text: string) => {
+    setSaveToast({ text, key: Date.now(), kind: "info" });
+  }, []);
+
+  // Duplicates a note: full content copy under a deduped “… copy” title,
+  // opened in a fresh tab.
+  const handleDuplicateNote = useCallback(
+    async (noteId: number) => {
+      try {
+        const n = await NoteService.GetNote(noteId);
+        if (!n) return;
+        const taken = new Set(notes.map((x) => x.title.toLowerCase()));
+        const base = `${n.title} copy`;
+        let t = base;
+        for (let i = 2; taken.has(t.toLowerCase()); i++) t = `${base} ${i}`;
+        const created = await NoteService.CreateNote(t, n.content);
+        if (created) {
+          await refreshNotes();
+          openNote(created.id, "new");
+          showToast(`Duplicated as “${t}”`);
+        }
+      } catch (err) {
+        console.error("Duplicate note failed", err);
+      }
+    },
+    [notes, refreshNotes, openNote, showToast]
+  );
 
   // Auto-hide the toast a few seconds after it appears.
   useEffect(() => {
@@ -312,6 +371,21 @@ export default function App() {
     },
     [refreshNotes, openNote, settings.showMdExtension]
   );
+
+  // Open today's daily note ("2026-02-08"), creating it if it doesn't exist.
+  const openDailyNote = useCallback(async () => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const base = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const existing = notes.find(
+      (n) => n.title === base || n.title === `${base}.md`
+    );
+    if (existing) {
+      openNote(existing.id, "new");
+      return;
+    }
+    await createNote(base);
+  }, [notes, openNote, createNote]);
 
   // New empty note in a fresh tab (the + button / Ctrl+T).
   const newNoteTab = useCallback(() => {
@@ -468,7 +542,7 @@ export default function App() {
 
         {activeTab?.kind === "graph" ? (
           <GraphView
-            activeId={tabs.find((t) => t.kind === "note")?.noteId ?? null}
+            activeId={lastNoteId}
             onOpenNote={(id) => openNote(id, "auto")}
             onBack={() => {
               // Return to the tab the user came from, else fall back to the
@@ -497,6 +571,8 @@ export default function App() {
               if (id != null) setRenameTarget({ id, title: currentTitle });
             }}
             onSaveNoteAs={handleSaveNoteAs}
+            onDuplicateNote={handleDuplicateNote}
+            onToast={showToast}
             titleReloadKey={titleReloadKey}
             defaultView={settings.defaultView}
             autosaveDelay={settings.autosaveDelay}
@@ -543,6 +619,10 @@ export default function App() {
           setPaletteOpen(false);
           void handleSaveNoteAs(id);
         }}
+        onOpenDailyNote={() => {
+          setPaletteOpen(false);
+          void openDailyNote();
+        }}
         onOpenSettings={() => {
           setPaletteOpen(false);
           setSettingsOpen(true);
@@ -583,12 +663,16 @@ export default function App() {
           className="fixed bottom-5 left-1/2 z-[100] flex max-w-[min(90vw,44rem)] -translate-x-1/2 items-center gap-2 border border-border bg-background/95 px-4 py-2.5 text-[13px] text-foreground shadow-lg"
         >
           <Check className="size-3.5 shrink-0 text-(--link-strong)" />
-          <span className="min-w-0 truncate">
-            <span className="text-muted-foreground">Saved to </span>
-            <code className="rounded-sm bg-muted px-1.5 py-0.5 text-[12px]">
-              {saveToast.text}
-            </code>
-          </span>
+          {saveToast.kind === "info" ? (
+            <span className="min-w-0 truncate">{saveToast.text}</span>
+          ) : (
+            <span className="min-w-0 truncate">
+              <span className="text-muted-foreground">Saved to </span>
+              <code className="rounded-sm bg-muted px-1.5 py-0.5 text-[12px]">
+                {saveToast.text}
+              </code>
+            </span>
+          )}
         </div>
       )}
 

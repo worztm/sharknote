@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A sharknote application
+Name=Sharknote
+Comment=A beautiful networked note-taking app with bidirectional links and a knowledge graph
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/sharknote.exe %u
+Exec=/usr/local/bin/sharknote %u
 Terminal=false
 Type=Application
-Icon=sharknote.exe
+Icon=sharknote
 Categories=Utility;
-StartupWMClass=sharknote.exe
+StartupWMClass=sharknote
 
  
