@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { Events } from "@wailsio/runtime";
-import { NoteService } from "../bindings/sharknote";
+import { NoteService, UpdaterService } from "../bindings/sharknote";
 import type { Note, NoteSummary } from "../bindings/sharknote";
 import { Sidebar } from "./components/Sidebar";
 import { EditorView } from "./components/EditorView";
@@ -11,6 +11,7 @@ import { NewTabDialog } from "./components/NewTabDialog";
 import { RenameNoteDialog } from "./components/RenameNoteDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { TabsBar, type TabItem } from "./components/TabsBar";
+import { UpdateBanner, type UpdateState } from "./components/UpdateBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,9 @@ export default function App() {
   } | null>(null);
   // Bumped after every rename so the editor re-fetches the note's title.
   const [titleReloadKey, setTitleReloadKey] = useState(0);
+  // Remote update state (null = nothing to show).
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const updateStageRef = useRef<UpdateState["stage"] | null>(null);
   // Transient toast shown after a Save as… export or a copy action.
   const [saveToast, setSaveToast] = useState<{
     text: string;
@@ -314,6 +318,91 @@ export default function App() {
     },
     [notes, refreshNotes, openNote, showToast]
   );
+
+  // ---------- Remote updates ----------------------------------------------
+
+  // Check the update manifest shortly after launch. Everything is wrapped
+  // in try/catch: in browser-mock/dev mode the service doesn't exist and a
+  // failed check must never disturb the app.
+  useEffect(() => {
+    const t = window.setTimeout(async () => {
+      try {
+        const info = await UpdaterService.CheckForUpdate();
+        if (info?.available) {
+          updateStageRef.current = "available";
+          setUpdateState({ stage: "available", latest: info.latest, notes: info.notes, percent: 0 });
+        }
+      } catch {
+        /* offline or manifest unavailable — stay silent */
+      }
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Download progress events drive the banner through downloading → ready.
+  useEffect(() => {
+    return Events.On("sharknote:update-progress", (ev) => {
+      const p = ev.data as { stage: string; percent?: number } | number;
+      if (!p || typeof p !== "object") return;
+      if (p.stage === "downloading") {
+        if (updateStageRef.current !== "downloading") {
+          updateStageRef.current = "downloading";
+          setUpdateState((s) => ({
+            stage: "downloading",
+            latest: s?.latest ?? "",
+            notes: s?.notes,
+            percent: p.percent ?? 0,
+          }));
+        } else {
+          setUpdateState((s) => (s ? { ...s, percent: p.percent ?? s.percent } : s));
+        }
+      } else if (p.stage === "done") {
+        updateStageRef.current = "ready";
+        setUpdateState((s) => (s ? { ...s, stage: "ready", percent: 100 } : s));
+      } else if (p.stage === "error") {
+        updateStageRef.current = "error";
+        setUpdateState((s) => (s ? { ...s, stage: "error" } : s));
+      }
+    });
+  }, []);
+
+  const startUpdateDownload = useCallback(async () => {
+    updateStageRef.current = "downloading";
+    setUpdateState((s) => (s ? { ...s, stage: "downloading", percent: 0 } : s));
+    try {
+      await UpdaterService.DownloadUpdate();
+    } catch (err) {
+      console.error("DownloadUpdate failed", err);
+      updateStageRef.current = "error";
+      setUpdateState((s) => (s ? { ...s, stage: "error" } : s));
+    }
+  }, []);
+
+  const applyUpdate = useCallback(async () => {
+    try {
+      await UpdaterService.ApplyUpdate(); // quits the app on success
+    } catch (err) {
+      console.error("ApplyUpdate failed", err);
+      updateStageRef.current = "error";
+      setUpdateState((s) => (s ? { ...s, stage: "error" } : s));
+    }
+  }, []);
+
+  // Manual check from Settings: returns a short human-readable result line.
+  const checkForUpdateManual = useCallback(async (): Promise<string> => {
+    try {
+      const info = await UpdaterService.CheckForUpdate();
+      if (!info) return "Could not reach the update server.";
+      if (info.available) {
+        updateStageRef.current = "available";
+        setUpdateState({ stage: "available", latest: info.latest, notes: info.notes, percent: 0 });
+        return `Sharknote ${info.latest} is available.`;
+      }
+      return `You're up to date (version ${info.version}).`;
+    } catch {
+      return "Could not reach the update server.";
+    }
+  }, []);
 
   // Auto-hide the toast a few seconds after it appears.
   useEffect(() => {
@@ -646,6 +735,7 @@ export default function App() {
         settings={settings}
         onChange={updateSettings}
         onOpenFolder={openFolderDialog}
+        onCheckForUpdate={checkForUpdateManual}
       />
 
       {/* ---------- Rename note (global) ---------- */}
@@ -654,6 +744,17 @@ export default function App() {
         initialTitle={renameTarget?.title ?? ""}
         onClose={() => setRenameTarget(null)}
         onRename={handleRenamed}
+      />
+
+      {/* ---------- Remote update pill ---------- */}
+      <UpdateBanner
+        state={updateState}
+        onDownload={() => void startUpdateDownload()}
+        onReload={() => void applyUpdate()}
+        onDismiss={() => {
+          updateStageRef.current = null;
+          setUpdateState(null);
+        }}
       />
 
       {/* ---------- “Saved to …” toast ---------- */}

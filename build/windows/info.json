@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "0.1.0"
+		"file_version": "1.5.0"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.1.0",
+			"ProductVersion": "1.5.0",
 			"CompanyName": "Sharknote",
 			"FileDescription": "A beautiful networked note-taking app with bidirectional links and a knowledge graph",
 			"LegalCopyright": "(c) 2026, Sharknote",

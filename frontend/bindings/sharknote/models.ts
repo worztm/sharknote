@@ -145,3 +145,21 @@ export interface Settings {
      */
     "vaultPath": string;
 }
+
+/**
+ * UpdateInfo is returned to the frontend by CheckForUpdate.
+ */
+export interface UpdateInfo {
+    "available": boolean;
+
+    /**
+     * the running version
+     */
+    "version": string;
+
+    /**
+     * the newest published version
+     */
+    "latest": string;
+    "notes"?: string;
+}

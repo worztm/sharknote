@@ -23,13 +23,15 @@ func main() {
 		log.Fatal("failed to seed store: ", err)
 	}
 
-	service := NewNoteService(store)
+		service := NewNoteService(store)
+	updater := NewUpdaterService()
 
 	app := application.New(application.Options{
 		Name:        "Sharknote",
 		Description: "A beautiful networked note-taking app with bidirectional links and a knowledge graph",
 		Services: []application.Service{
 			application.NewService(service),
+			application.NewService(updater),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

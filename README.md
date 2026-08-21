@@ -99,13 +99,28 @@ how to run the app past the warning.
 RELEASING TO THE WEBSITE
 
 ```
-# 1. bump the version in build/windows/info.json, build/windows/nsis/project.nsi
-#    and website/src/App.jsx, then build + sign (above)
+# 1. bump the version in version.go (AppVersion — drives the update check),
+#    build/config.yml (source of truth; regenerates info.json),
+#    build/windows/nsis/project.nsi and website/src/App.jsx,
+#    then build + sign (above)
 # 2. update INSTALLER_SHA256 in website/src/App.jsx:
 sha256sum bin/sharknote-amd64-installer.exe
-# 3. build the site and deploy to Cloudflare Pages:
+# 3. build the site and deploy to Cloudflare Pages — this also publishes
+#    latest.json (the update manifest the app polls):
 cd website && npm run deploy
 ```
+
+REMOTE UPDATES
+
+The app checks https://sharknote.pages.dev/latest.json after launch. When the
+manifest version is newer than AppVersion, a pill offers to download the
+signed installer. The download is verified against the manifest's SHA-256,
+and on "Reload to update" the installer runs silently (/S) — it stops the
+running app, replaces its files (notes in %APPDATA% are never touched) and
+Sharknote relaunches automatically. Override the update server with the
+SHARKNOTE_UPDATE_BASE environment variable for staging. latest.json is
+generated from build/windows/info.json + the installer's hash by
+website/scripts/prepare-installer.mjs during deploy.
 
 UI-ONLY DEVELOPMENT (NO GO BACKEND)
 

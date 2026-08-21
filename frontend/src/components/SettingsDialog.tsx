@@ -1,4 +1,5 @@
-import { FolderOpen, FolderX, Settings2 } from "lucide-react";
+import { useState } from "react";
+import { FolderOpen, FolderX, RefreshCw, Settings2 } from "lucide-react";
 import type { AppSettings } from "../lib/settings";
 import {
   ACCENT_OPTIONS,
@@ -24,6 +25,8 @@ interface SettingsDialogProps {
   /** Live-applied on every change: persist + apply immediately. */
   onChange: (next: AppSettings) => void;
   onOpenFolder: () => void;
+  /** Checks the update server; returns a short human-readable result. */
+  onCheckForUpdate: () => Promise<string>;
 }
 
 /** Small segmented control (Dark/Light, Serif/Sans, Preview/Edit …). */
@@ -156,8 +159,20 @@ export function SettingsDialog({
   settings,
   onChange,
   onOpenFolder,
+  onCheckForUpdate,
 }: SettingsDialogProps) {
   const set = (patch: Partial<AppSettings>) => onChange({ ...settings, ...patch });
+
+  // Update check state for the Updates row.
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const runUpdateCheck = async () => {
+    setChecking(true);
+    setUpdateMsg(null);
+    const msg = await onCheckForUpdate();
+    setChecking(false);
+    setUpdateMsg(msg);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -276,6 +291,28 @@ export function SettingsDialog({
               onChange={(showMdExtension) => set({ showMdExtension })}
               label="Show .md extension on new notes"
             />
+          </Row>
+        </section>
+
+        {/* ---------- Updates ---------- */}
+        <section className="mt-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Updates
+          </h3>
+          <Separator className="my-2" />
+          <Row
+            label="Software updates"
+            hint={updateMsg ?? "Sharknote checks for updates after launch. You choose when to install."}
+          >
+            <button
+              type="button"
+              onClick={() => void runUpdateCheck()}
+              disabled={checking}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/60 px-2.5 py-1.5 text-[11.5px] font-medium text-foreground transition hover:bg-secondary disabled:opacity-50"
+            >
+              <RefreshCw className={cn("size-3.5", checking && "animate-spin")} />
+              {checking ? "Checking…" : "Check now"}
+            </button>
           </Row>
         </section>
 
