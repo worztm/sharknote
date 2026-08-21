@@ -121,7 +121,9 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   );
 }
 
-/** Toggle switch (no Radix switch in the bundle — a plain button works). */
+/** Toggle switch. The knob is positioned with an inline style (not Tailwind
+ *  translate utilities) so it renders identically in every webview: white
+ *  head sits LEFT when off and slides RIGHT when on, inside the track. */
 function Toggle({
   checked,
   onChange,
@@ -139,15 +141,13 @@ function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-        checked ? "bg-primary" : "bg-input"
+        "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
+        checked ? "border-transparent bg-primary" : "border-border bg-input"
       )}
     >
       <span
-        className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
-          checked ? "translate-x-[22px]" : "translate-x-0.5"
-        )}
+        className="absolute rounded-full bg-white shadow transition-[left] duration-150 ease-out"
+        style={{ left: checked ? 22 : 3, top: 2, width: 20, height: 20 }}
       />
     </button>
   );
