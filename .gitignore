@@ -39,3 +39,4 @@ website/dist/
 
 # ── Local build tooling / signing ──
 build/tools/
+website/
