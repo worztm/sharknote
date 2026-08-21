@@ -9,3 +9,8 @@ import "os/exec"
 func launchDetached(name string, args ...string) error {
 	return exec.Command(name, args...).Start()
 }
+
+// installedAppPath is a non-Windows stub — updates only ship on Windows.
+func installedAppPath() string {
+	return ""
+}

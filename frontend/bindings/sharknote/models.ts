@@ -162,4 +162,10 @@ export interface UpdateInfo {
      */
     "latest": string;
     "notes"?: string;
+
+    /**
+     * Ready is true when a verified installer is already on disk (downloaded
+     * now or in a previous session), so the UI can offer "reload" directly.
+     */
+    "ready": boolean;
 }

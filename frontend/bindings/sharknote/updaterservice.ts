@@ -16,8 +16,8 @@ import * as $models from "./models.js";
 
 /**
  * ApplyUpdate runs the downloaded installer silently and quits the app. The
- * installer stops the running instance, swaps the files and the helper
- * relaunches Sharknote — the user's "reload".
+ * installer stops any running instance, swaps the files and the helper
+ * relaunches the installed Sharknote — the user's "reload".
  */
 export function ApplyUpdate(): $CancellablePromise<void> {
     return $Call.ByID(2438952837);

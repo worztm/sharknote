@@ -329,8 +329,13 @@ export default function App() {
       try {
         const info = await UpdaterService.CheckForUpdate();
         if (info?.available) {
-          updateStageRef.current = "available";
-          setUpdateState({ stage: "available", latest: info.latest, notes: info.notes, percent: 0 });
+          updateStageRef.current = info.ready ? "ready" : "available";
+          setUpdateState({
+            stage: info.ready ? "ready" : "available",
+            latest: info.latest,
+            notes: info.notes,
+            percent: info.ready ? 100 : 0,
+          });
         }
       } catch {
         /* offline or manifest unavailable — stay silent */
@@ -394,9 +399,17 @@ export default function App() {
       const info = await UpdaterService.CheckForUpdate();
       if (!info) return "Could not reach the update server.";
       if (info.available) {
-        updateStageRef.current = "available";
-        setUpdateState({ stage: "available", latest: info.latest, notes: info.notes, percent: 0 });
-        return `Sharknote ${info.latest} is available.`;
+        const stage: UpdateState["stage"] = info.ready ? "ready" : "available";
+        updateStageRef.current = stage;
+        setUpdateState({
+          stage,
+          latest: info.latest,
+          notes: info.notes,
+          percent: info.ready ? 100 : 0,
+        });
+        return info.ready
+          ? `Sharknote ${info.latest} is downloaded and ready to install.`
+          : `Sharknote ${info.latest} is available.`;
       }
       return `You're up to date (version ${info.version}).`;
     } catch {
