@@ -471,7 +471,7 @@ export function enhanceCallouts(html: string): string {
  */
 export function renderRichContent(html: string): string {
   const clean = DOMPurify.sanitize(html, {
-    ADD_ATTR: ["data-wiki-target", "contenteditable", "data-callout", "data-mermaid"],
+    ADD_ATTR: ["data-wiki-target", "contenteditable", "data-callout", "data-mermaid", "data-mermaid-source"],
   });
   const doc = new DOMParser().parseFromString(`<body>${clean}</body>`, "text/html");
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
@@ -643,10 +643,15 @@ export async function renderMermaidBlocks(root: ParentNode, dark: boolean): Prom
     const src = el.getAttribute("data-mermaid") ?? "";
     try {
       const { svg } = await mermaidLib.render(`mermaid-${Date.now()}-${i}`, src);
+      // Keep the source on the holder so restoreMermaidBlocks can swap the
+      // diagram back out for its source before content is saved.
       const holder = document.createElement("div");
       holder.className = "mermaid-diagram";
+      holder.setAttribute("data-mermaid-source", src);
+      // foreignObject carries mermaid's HTML labels — without it, node text
+      // silently disappears.
       holder.innerHTML = DOMPurify.sanitize(svg, {
-        USE_PROFILES: { svg: true, svgFilters: true },
+        ADD_TAGS: ["foreignObject"],
         ADD_ATTR: ["aria-roledescription"],
       });
       el.replaceWith(holder);
@@ -657,6 +662,30 @@ export async function renderMermaidBlocks(root: ParentNode, dark: boolean): Prom
     }
   }
   return rendered;
+}
+
+/**
+ * Swaps every rendered .mermaid-diagram back into a source code block.
+ * Called before reading preview DOM into note content, so rendered SVGs are
+ * never baked into storage (and edit mode keeps showing the source).
+ */
+export function restoreMermaidBlocks(root: ParentNode): void {
+  for (const holder of Array.from(root.querySelectorAll(".mermaid-diagram[data-mermaid-source]"))) {
+    const src = (holder as HTMLElement).getAttribute("data-mermaid-source") ?? "";
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-block mermaid-block";
+    const head = document.createElement("div");
+    head.className = "code-block-head";
+    head.innerHTML = '<span class="code-lang">mermaid</span>';
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.className = "language-mermaid";
+    code.textContent = src;
+    pre.appendChild(code);
+    wrapper.appendChild(head);
+    wrapper.appendChild(pre);
+    holder.replaceWith(wrapper);
+  }
 }
 
 // --- Outline (headings) ------------------------------------------------------

@@ -58,7 +58,7 @@ export function LinkPanel({
 
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/40">
-      <div className="border-b border-border px-4 py-3">
+      <div className="flex border-b border-border px-4 py-3">
         <div className="flex flex-1 items-center gap-0.5 rounded-lg border border-border bg-secondary/40 p-0.5">
           <button
             onClick={() => onPanelTabChange("links")}

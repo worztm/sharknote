@@ -26,6 +26,7 @@ import {
   markdownToEditorHtml,
   renderMermaidBlocks,
   renderRichContent,
+  restoreMermaidBlocks,
   stripHtml,
 } from "../../lib/markdown";
 import { fullDate, wordCount } from "../../lib/time";
@@ -815,6 +816,9 @@ export function EditorView({
       input.checked = !input.checked;
       const root = previewRef.current;
       if (!root) return;
+      // Swap rendered mermaid diagrams back to source so the SVG is never
+      // saved into the note (edit mode keeps the readable code).
+      restoreMermaidBlocks(root);
       contentRef.current = root.innerHTML;
       setContent(root.innerHTML);
       scheduleSave();

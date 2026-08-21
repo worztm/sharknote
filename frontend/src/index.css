@@ -782,7 +782,9 @@
 }
 
 /* ===== Interactive task checkboxes ======================================== */
+.md-body li:has(> .task-checkbox),
 .md-body li.task-list-item,
+.editor-area li:has(> .task-checkbox),
 .editor-area li.task-list-item {
   list-style: none;
 }

@@ -35,7 +35,7 @@ Unicode true
 ####
 !define INFO_COMPANYNAME "Sharknote"
 !define INFO_PRODUCTNAME "Sharknote"
-!define INFO_PRODUCTVERSION "1.7.0"
+!define INFO_PRODUCTVERSION "1.7.1"
 !define INFO_COPYRIGHT "© 2026 Sharknote"
 !define UNINST_KEY_NAME "Sharknote"
 
