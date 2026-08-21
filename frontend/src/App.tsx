@@ -3,15 +3,15 @@ import { Check } from "lucide-react";
 import { Events } from "@wailsio/runtime";
 import { NoteService, UpdaterService } from "../bindings/sharknote";
 import type { Note, NoteSummary } from "../bindings/sharknote";
-import { Sidebar } from "./components/Sidebar";
-import { EditorView } from "./components/EditorView";
-import { GraphView } from "./components/GraphView";
-import { CommandPalette } from "./components/CommandPalette";
-import { NewTabDialog } from "./components/NewTabDialog";
-import { RenameNoteDialog } from "./components/RenameNoteDialog";
-import { SettingsDialog } from "./components/SettingsDialog";
-import { TabsBar, type TabItem } from "./components/TabsBar";
-import { UpdateBanner, type UpdateState } from "./components/UpdateBanner";
+import { Sidebar } from "./components/layout/Sidebar";
+import { EditorView } from "./components/editor/EditorView";
+import { GraphView } from "./components/graph/GraphView";
+import { CommandPalette } from "./components/dialogs/CommandPalette";
+import { NewTabDialog } from "./components/dialogs/NewTabDialog";
+import { RenameNoteDialog } from "./components/dialogs/RenameNoteDialog";
+import { SettingsDialog } from "./components/dialogs/SettingsDialog";
+import { TabsBar, type TabItem } from "./components/layout/TabsBar";
+import { UpdateBanner, type UpdateState } from "./components/dialogs/UpdateBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -853,34 +853,54 @@ function EmptyState({
           </p>
         </div>
         {loaded && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onCreate}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-[0_0_24px_-6px] shadow-primary/50 transition hover:bg-primary/90"
-            >
-              New note
-            </button>
-            <button
-              onClick={onOpenFiles}
-              title="Open .md files (multi-select)"
-              className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
-            >
-              Open files…
-            </button>
-            <button
-              onClick={onOpenFolder}
-              title="Open a whole folder as your vault"
-              className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
-            >
-              Open folder…
-            </button>
-            <button
-              onClick={onOpenGraph}
-              className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
-            >
-              Explore graph
-            </button>
-          </div>
+          <>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onCreate}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-[0_0_24px_-6px] shadow-primary/50 transition hover:bg-primary/90"
+              >
+                New note
+              </button>
+              <button
+                onClick={onOpenFiles}
+                title="Open .md files (multi-select)"
+                className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
+              >
+                Open files…
+              </button>
+              <button
+                onClick={onOpenFolder}
+                title="Open a whole folder as your vault"
+                className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
+              >
+                Open folder…
+              </button>
+              <button
+                onClick={onOpenGraph}
+                className="rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary"
+              >
+                Explore graph
+              </button>
+            </div>
+            <div className="flex items-center gap-5 text-[11px] text-muted-foreground/80">
+              <span>
+                <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-sans text-[10px]">Ctrl</kbd>
+                {" "}+{" "}
+                <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-sans text-[10px]">K</kbd>{" "}
+                command palette
+              </span>
+              <span>
+                <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-sans text-[10px]">Ctrl</kbd>
+                {" "}+{" "}
+                <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-sans text-[10px]">G</kbd>{" "}
+                knowledge graph
+              </span>
+              <span>
+                <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">[[</kbd>{" "}
+                link notes
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>

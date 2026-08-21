@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { ArrowUpDown, FolderOpen, Plus, Search, Settings2, Waypoints, FileText, Trash2, PencilLine } from "lucide-react";
-import type { NoteSummary } from "../../bindings/sharknote";
-import { Logo } from "../App";
-import { relativeTime } from "../lib/time";
-import { cn } from "../lib/utils";
-import type { View } from "../App";
+import type { NoteSummary } from "../../../bindings/sharknote";
+import { Logo } from "../../App";
+import { relativeTime } from "../../lib/time";
+import { cn } from "../../lib/utils";
+import type { View } from "../../App";
 
 interface SidebarProps {
   notes: NoteSummary[];
@@ -199,8 +199,11 @@ export function Sidebar({
         ) : (
           groups.map((g) => (
             <div key={g.label} className="mb-3">
-              <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
-                {g.label}
+              <div className="flex items-center justify-between px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+                <span>{g.label}</span>
+                <span className="font-medium normal-case tabular-nums tracking-normal text-muted-foreground/50">
+                  {g.items.length}
+                </span>
               </div>
               <div className="space-y-px">
                 {g.items.map((n) => {
@@ -292,32 +295,34 @@ export function Sidebar({
           </div>
         )}
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => onOpenNote(activeId ?? notes[0]?.id)}
-            disabled={!activeId}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
-              view === "notes"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-              !activeId && "opacity-40"
-            )}
-          >
-            <FileText className="size-3.5" />
-            Notes
-          </button>
-          <button
-            onClick={onOpenGraph}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
-              view === "graph"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-            )}
-          >
-            <Waypoints className="size-3.5" />
-            Graph
-          </button>
+          <div className="flex flex-1 items-center gap-0.5 rounded-xl border border-border bg-secondary/40 p-0.5">
+            <button
+              onClick={() => onOpenNote(activeId ?? notes[0]?.id)}
+              disabled={!activeId}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium transition",
+                view === "notes"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-sidebar-foreground",
+                !activeId && "opacity-40"
+              )}
+            >
+              <FileText className="size-3.5" />
+              Notes
+            </button>
+            <button
+              onClick={onOpenGraph}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium transition",
+                view === "graph"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-sidebar-foreground"
+              )}
+            >
+              <Waypoints className="size-3.5" />
+              Graph
+            </button>
+          </div>
           <button
             onClick={onOpenSettings}
             title="Settings"

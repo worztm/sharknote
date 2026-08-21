@@ -1,5 +1,5 @@
 import { FileText, Plus, Waypoints, X } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn } from "../../lib/utils";
 
 export interface TabItem {
   /** Stable unique key of the tab (used for activation/close). */

@@ -9,7 +9,7 @@ import {
   Italic,
   Underline,
 } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn } from "../../lib/utils";
 
 /** A single formatting action requested from the right-click menu. */
 export type FormatCommand =

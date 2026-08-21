@@ -1,22 +1,22 @@
 import { useState } from "react";
 import { FolderOpen, FolderX, RefreshCw, Settings2 } from "lucide-react";
-import type { AppSettings } from "../lib/settings";
+import type { AppSettings } from "../../lib/settings";
 import {
   ACCENT_OPTIONS,
   EDITOR_FONT_OPTIONS,
   GRAPH_THEME_OPTIONS,
   THEME_OPTIONS,
-} from "../lib/settings";
-import { cn } from "../lib/utils";
+} from "../../lib/settings";
+import { cn } from "../../lib/utils";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "./ui/dialog";
-import { Label } from "./ui/label";
-import { Separator } from "./ui/separator";
+} from "../ui/dialog";
+import { Label } from "../ui/label";
+import { Separator } from "../ui/separator";
 
 interface SettingsDialogProps {
   open: boolean;

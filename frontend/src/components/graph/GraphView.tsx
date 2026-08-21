@@ -27,10 +27,10 @@ import {
   type Simulation,
   type SimulationNodeDatum,
 } from "d3-force";
-import { NoteService } from "../../bindings/sharknote";
-import type { GraphData, GraphEdge, GraphNode } from "../../bindings/sharknote";
-import type { AppSettings } from "../lib/settings";
-import { graphPalette, type GraphPalette } from "../lib/graphThemes";
+import { NoteService } from "../../../bindings/sharknote";
+import type { GraphData, GraphEdge, GraphNode } from "../../../bindings/sharknote";
+import type { AppSettings } from "../../lib/settings";
+import { graphPalette, type GraphPalette } from "../../lib/graphThemes";
 
 interface GNode extends SimulationNodeDatum {
   id: number;

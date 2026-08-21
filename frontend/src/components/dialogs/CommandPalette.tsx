@@ -9,8 +9,8 @@ import {
   Trash2,
   Waypoints,
 } from "lucide-react";
-import type { NoteSummary } from "../../bindings/sharknote";
-import { relativeTime } from "../lib/time";
+import type { NoteSummary } from "../../../bindings/sharknote";
+import { relativeTime } from "../../lib/time";
 import {
   CommandDialog,
   CommandEmpty,
@@ -19,7 +19,7 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "./ui/command";
+} from "../ui/command";
 
 interface CommandPaletteProps {
   open: boolean;

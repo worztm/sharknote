@@ -4,9 +4,9 @@ import {
   Link2,
   Plus,
 } from "lucide-react";
-import { NoteService } from "../../bindings/sharknote";
-import type { Backlink, LinkInfo } from "../../bindings/sharknote";
-import { cn } from "../lib/utils";
+import { NoteService } from "../../../bindings/sharknote";
+import type { Backlink, LinkInfo } from "../../../bindings/sharknote";
+import { cn } from "../../lib/utils";
 
 interface LinkPanelProps {
   noteId: number;

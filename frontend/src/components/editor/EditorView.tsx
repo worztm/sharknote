@@ -14,8 +14,8 @@ import {
   Trash2,
 } from "lucide-react";
 import DOMPurify from "dompurify";
-import { NoteService } from "../../bindings/sharknote";
-import type { Note, NoteSummary } from "../../bindings/sharknote";
+import { NoteService } from "../../../bindings/sharknote";
+import type { Note, NoteSummary } from "../../../bindings/sharknote";
 import { Browser } from "@wailsio/runtime";
 import {
   findWikiQuery,
@@ -23,10 +23,10 @@ import {
   markdownToEditorHtml,
   renderRichContent,
   stripHtml,
-} from "../lib/markdown";
-import { fullDate, wordCount } from "../lib/time";
-import { cn } from "../lib/utils";
-import { Button } from "./ui/button";
+} from "../../lib/markdown";
+import { fullDate, wordCount } from "../../lib/time";
+import { cn } from "../../lib/utils";
+import { Button } from "../ui/button";
 import { FormatMenu, type FormatCommand } from "./FormatMenu";
 import { LinkPanel } from "./LinkPanel";
 
@@ -865,22 +865,24 @@ export function EditorView({
           </div>
 
           <div className="flex items-center gap-1.5 pt-1">
-            <Button
-              variant={preview ? "secondary" : "ghost"}
-              size="icon"
-              title="Toggle preview (Ctrl+E)"
-              onClick={() => setPreview((p) => !p)}
-            >
-              {preview ? <FilePenLine className="size-4" /> : <Eye className="size-4" />}
-            </Button>
-            <Button
-              variant={panelOpen ? "secondary" : "ghost"}
-              size="icon"
-              title="Toggle links panel"
-              onClick={() => setPanelOpen((p) => !p)}
-            >
-              <PanelRight className="size-4" />
-            </Button>
+            <div className="flex items-center gap-0.5 rounded-xl border border-border bg-secondary/40 p-0.5">
+              <Button
+                variant={preview ? "secondary" : "ghost"}
+                size="icon"
+                title="Toggle preview (Ctrl+E)"
+                onClick={() => setPreview((p) => !p)}
+              >
+                {preview ? <FilePenLine className="size-4" /> : <Eye className="size-4" />}
+              </Button>
+              <Button
+                variant={panelOpen ? "secondary" : "ghost"}
+                size="icon"
+                title="Toggle links panel"
+                onClick={() => setPanelOpen((p) => !p)}
+              >
+                <PanelRight className="size-4" />
+              </Button>
+            </div>
             <div className="relative" ref={actionsRef}>
               <Button
                 variant={actionsOpen ? "secondary" : "ghost"}
@@ -1040,7 +1042,7 @@ export function EditorView({
                 ? "Saving…"
                 : "Unsaved changes"}
           </span>
-          <span className="text-border">|</span>
+          <span className="text-border">·</span>
           <span className="tabular-nums">{words} words</span>
           <span className="tabular-nums">{chars} chars</span>
           <span className="tabular-nums">~{Math.max(1, Math.round(words / 200))} min read</span>

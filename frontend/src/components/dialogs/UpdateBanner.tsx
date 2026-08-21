@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { ArrowDownToLine, RefreshCw, RotateCcw, X } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn } from "../../lib/utils";
 
 export interface UpdateState {
   stage: "available" | "downloading" | "ready" | "error";

@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, FileText, Search } from "lucide-react";
-import type { NoteSummary } from "../../bindings/sharknote";
-import { relativeTime } from "../lib/time";
+import type { NoteSummary } from "../../../bindings/sharknote";
+import { relativeTime } from "../../lib/time";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
 
 interface NewTabDialogProps {
   /** null = closed, string = pre-filled create-title */
