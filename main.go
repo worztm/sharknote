@@ -23,7 +23,7 @@ func main() {
 		log.Fatal("failed to seed store: ", err)
 	}
 
-		service := NewNoteService(store)
+	service := NewNoteService(store)
 	updater := NewUpdaterService()
 
 	app := application.New(application.Options{

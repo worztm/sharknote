@@ -565,7 +565,7 @@ export default function App() {
         e.preventDefault();
         // Never stack the palette on top of another dialog.
         if (!prefillTitle && !settingsOpen) setPaletteOpen(true);
-      } else if ((k === "n" || k === "t") && !paletteOpen && !settingsOpen) {
+      } else if ((k === "n" || k === "t") && !skipShortcuts) {
         e.preventDefault();
         setPrefillTitle("");
       } else if (k === "g" && !skipShortcuts) {

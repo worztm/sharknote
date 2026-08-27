@@ -18,8 +18,22 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).has("mock")) {
   }
 }
 
+// Splash hand-off: the static splash in index.html painted instantly at
+// startup. Once React has mounted the real UI, fade the splash out and
+// remove it so it never intercepts clicks.
+function hideSplash() {
+  const el = document.getElementById("splash");
+  if (!el) return;
+  el.classList.add("splash-hide");
+  window.setTimeout(() => el.remove(), 400);
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+
+// Wait one frame past the render call so the first real UI frame exists
+// before the splash starts fading.
+requestAnimationFrame(() => requestAnimationFrame(hideSplash));

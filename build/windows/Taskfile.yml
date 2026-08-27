@@ -6,8 +6,8 @@ includes:
 vars:
   # Signing configuration - edit these values for your project
   # SIGN_CERTIFICATE: "path/to/certificate.pfx"
-  # SIGN_THUMBPRINT: "certificate-thumbprint"  # Alternative to SIGN_CERTIFICATE
-  # TIMESTAMP_SERVER: "http://timestamp.digicert.com"
+  SIGN_THUMBPRINT: "AFC3B4E0D35C341087CB4DD99B720AB099527D65"  # Alternative to SIGN_CERTIFICATE
+  TIMESTAMP_SERVER: "http://timestamp.digicert.com"
   #
   # Password is stored securely in system keychain. Run: wails3 setup signing
 
