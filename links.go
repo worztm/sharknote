@@ -146,19 +146,6 @@ func (s *Store) resolvePending(title string) error {
 	return err
 }
 
-// resolveTarget looks up the note id for a wiki-link target string.
-// Returns 0 when no note matches.
-func (s *Store) resolveTarget(target string) (int64, error) {
-	var id int64
-	err := s.db.QueryRow(
-		"SELECT id FROM notes WHERE title = ? COLLATE NOCASE LIMIT 1", target,
-	).Scan(&id)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return id, err
-}
-
 // seedNote is one of the default notes created on first run.
 type seedNote struct {
 	title   string
