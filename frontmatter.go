@@ -66,11 +66,9 @@ func parseFrontmatter(source string) *Frontmatter {
 	lines := strings.Split(block, "\n")
 
 	// Tracks whether we are inside a list that belongs to the current key.
-	var listKey string
 	var list *[]string
 
 	flush := func() {
-		listKey = ""
 		list = nil
 	}
 
@@ -98,13 +96,11 @@ func parseFrontmatter(source string) *Frontmatter {
 			}
 			if val == "" {
 				// list form follows on indented lines
-				listKey = key
 				list = target
 			} else {
 				*target = splitList(val)
 			}
 		}
 	}
-	_ = listKey
 	return fm
 }
