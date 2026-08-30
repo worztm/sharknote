@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	_ "modernc.org/sqlite"
 )
@@ -664,6 +665,15 @@ func backlinkExcerpt(content, title string) string {
 				end := m[1] + 60
 				if end > len(content) {
 					end = len(content)
+				}
+				// The window is measured in bytes; slide both edges to the
+				// nearest rune boundary so an emoji (or any multi-byte rune)
+				// straddling the cut can never render as a broken character.
+				for start < end && !utf8.RuneStart(content[start]) {
+					start++
+				}
+				for end > start && !utf8.RuneStart(content[end-1]) {
+					end--
 				}
 				snippet := stripMarkdown(content[start:end])
 				snippet = strings.Join(strings.Fields(snippet), " ")

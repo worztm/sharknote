@@ -35,3 +35,16 @@ func TestBacklinkExcerptShowsTheRightLinkContext(t *testing.T) {
 		t.Fatalf("excerpt should surround the [[Alpha]] link, got %q", back[0].Excerpt)
 	}
 }
+
+func TestBacklinkExcerptDoesNotSplitUTF8Runes(t *testing.T) {
+	// Emoji (4-byte runes) packed before the wiki-link — the old byte-slice
+	// window would land mid-rune and produce a broken character (U+FFFD).
+	content := "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 [[Target note]] tail"
+	out := backlinkExcerpt(content, "Target note")
+	if strings.ContainsRune(out, '\uFFFD') {
+		t.Fatalf("excerpt contains broken rune(s): %q", out)
+	}
+	if !strings.Contains(out, "Target note") {
+		t.Fatalf("excerpt should contain the link target, got %q", out)
+	}
+}
