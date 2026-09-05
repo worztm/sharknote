@@ -50,3 +50,6 @@ android-native/app/build/
 android-native/local.properties
 android-native/.idea/
 *.apk
+
+# Wails android template output (removed; native app lives in android-native/)
+build/android/
