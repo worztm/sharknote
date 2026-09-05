@@ -42,11 +42,11 @@ build/tools/
 website/
 
 # Android build artifacts and machine-local config
-build/android/.gradle/
-build/android/app/build/
-build/android/build/
-build/android/gen/
-build/android/local.properties
-build/android/app/src/main/jniLibs/
-build/android/overlay.json
+*.apk
+
+# Native Android app (android-native/) build outputs
+android-native/.gradle/
+android-native/app/build/
+android-native/local.properties
+android-native/.idea/
 *.apk

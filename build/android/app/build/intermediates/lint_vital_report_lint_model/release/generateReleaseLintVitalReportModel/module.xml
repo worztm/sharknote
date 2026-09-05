@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="C:\Users\masud\Documents\All\sharknote\build\android\app"
+    name=":app"
+    type="APP"
+    maven="WailsApp:app:unspecified"
+    agpVersion="8.7.3"
+    buildFolder="build"
+    bootClassPath="C:\Users\masud\Documents\Musically\.android-sdk\platforms\android-34\android.jar;C:\Users\masud\Documents\Musically\.android-sdk\build-tools\34.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="11"
+    compileTarget="android-34"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

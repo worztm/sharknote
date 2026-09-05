@@ -1,0 +1,7 @@
+#Sat Sep 05 09:59:15 WAT 2026
+base.1=C\:\\Users\\masud\\Documents\\All\\sharknote\\build\\android\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes2.dex
+path.1=classes2.dex
+base.0=C\:\\Users\\masud\\Documents\\All\\sharknote\\build\\android\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
+renamed.1=classes2.dex
+renamed.0=classes.dex
+path.0=classes.dex
