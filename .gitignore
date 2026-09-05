@@ -40,3 +40,13 @@ website/dist/
 # ── Local build tooling / signing ──
 build/tools/
 website/
+
+# Android build artifacts and machine-local config
+build/android/.gradle/
+build/android/app/build/
+build/android/build/
+build/android/gen/
+build/android/local.properties
+build/android/app/src/main/jniLibs/
+build/android/overlay.json
+*.apk

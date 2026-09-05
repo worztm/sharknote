@@ -1,4 +1,4 @@
-package com.wails.app;
+package app.sharknote.mobile;
 
 import android.net.Uri;
 import android.util.Log;

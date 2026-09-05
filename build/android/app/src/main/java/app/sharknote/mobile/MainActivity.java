@@ -1,4 +1,4 @@
-package com.wails.app;
+package app.sharknote.mobile;
 
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;

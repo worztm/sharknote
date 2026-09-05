@@ -1,4 +1,4 @@
-package com.wails.app;
+package app.sharknote.mobile;
 
 import android.app.Activity;
 import android.app.Notification;

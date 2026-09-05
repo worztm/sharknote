@@ -818,3 +818,32 @@
   overflow-x: auto;
 }
 .mermaid-diagram svg { max-width: 100%; height: auto; }
+
+
+/* ---- Android / phone adaptation (build/android) ----
+   The desktop layout is sidebar + tabs + editor side by side. On a phone-width
+   viewport the sidebar becomes an overlay drawer (toggled by the hamburger the
+   app already renders at narrow widths), the tabs bar scrolls horizontally,
+   and touch targets grow to meet the 48dp Android guidance. */
+@media (max-width: 640px) {
+  /* the sidebar slides over the content instead of squeezing the editor */
+  aside.w-72 {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 40;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
+  /* the tabs bar keeps one row and swipes horizontally */
+  [data-tabs-bar] {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  [data-tabs-bar]::-webkit-scrollbar { display: none; }
+  /* comfortable touch targets */
+  button, [role="button"], a { min-height: 44px; }
+  /* keep the editor text at a readable phone size */
+  .ProseMirror, .note-content { font-size: 16px; line-height: 1.65; }
+  /* safe areas: keep clear of the gesture bar and status bar */
+  body { padding-bottom: env(safe-area-inset-bottom); }
+}

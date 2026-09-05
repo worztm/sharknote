@@ -25,7 +25,7 @@ interface TabsBarProps {
  */
 export function TabsBar({ tabs, activeKey, onActivate, onClose, onNewTab }: TabsBarProps) {
   return (
-    <div className="flex h-10 shrink-0 items-stretch gap-px overflow-x-auto border-b border-border bg-sidebar/40 [scrollbar-width:thin]">
+    <div data-tabs-bar className="flex h-10 shrink-0 items-stretch gap-px overflow-x-auto border-b border-border bg-sidebar/40 [scrollbar-width:thin]">
       {tabs.map((tab) => {
         const active = tab.key === activeKey;
         return (
