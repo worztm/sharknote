@@ -53,3 +53,4 @@ android-native/.idea/
 
 # Wails android template output (removed; native app lives in android-native/)
 build/android/
+android-native/build/
