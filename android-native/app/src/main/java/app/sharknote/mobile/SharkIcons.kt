@@ -52,6 +52,25 @@ val GraphIcon: ImageVector by lazy {
     }.build()
 }
 
+val CrosshairIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Crosshair", defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        addPath(
+            pathData = addPathNodes("M12,2 L12,6 M12,18 L12,22 M2,12 L6,12 M18,12 L22,12"),
+            stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+            strokeLineWidth = 1.8f,
+            strokeLineCap = StrokeCap.Round,
+        )
+        addPath(
+            pathData = addPathNodes("M7,12a5,5 0 1,0 10,0a5,5 0 1,0 -10,0Z"),
+            stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+            strokeLineWidth = 1.8f,
+        )
+    }.build()
+}
+
 val EyeIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "Eye", defaultWidth = 24.dp, defaultHeight = 24.dp,

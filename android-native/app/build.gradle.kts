@@ -12,8 +12,8 @@ android {
         applicationId = "app.sharknote.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 191
-        versionName = "1.9.1"
+        versionCode = 300
+        versionName = "0.3.0"
     }
 
     buildTypes {
