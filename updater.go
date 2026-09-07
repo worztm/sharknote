@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -69,6 +70,39 @@ type updateManifest struct {
 	URL     string `json:"url"`
 	SHA256  string `json:"sha256"`
 	Notes   string `json:"notes,omitempty"`
+	Sig     string `json:"sig,omitempty"` // hex Ed25519 over "version\nurl\nsha256\nnotes"
+}
+
+// updatePubKeyHex is the Ed25519 public key matching the maintainer's offline
+// signing key. The manifest signature is verified against THIS constant,
+// which is baked into the compiled exe: an attacker who fully compromises the
+// website or the Cloudflare account still cannot publish an update the app
+// will accept, because they cannot forge a signature without the private key.
+// Rotate by rebuilding the app with a new constant.
+const updatePubKeyHex = "1c953494506ae8b3f4027c050f8dcadd62178e86678e25d7484d20cd92a53db8"
+
+// canonicalManifestBytes is the exact byte sequence the signing script
+// (website/scripts/prepare-installer.mjs) signs. Keep both in sync.
+func canonicalManifestBytes(m *updateManifest) []byte {
+	return []byte(m.Version + "\n" + m.URL + "\n" + strings.ToLower(m.SHA256) + "\n" + m.Notes)
+}
+
+func verifyManifestSig(m *updateManifest) error {
+	if m.Sig == "" {
+		return errors.New("update manifest is not signed")
+	}
+	pub, err := hex.DecodeString(updatePubKeyHex)
+	if err != nil || len(pub) != 32 {
+		return errors.New("invalid embedded update public key")
+	}
+	sig, err := hex.DecodeString(m.Sig)
+	if err != nil {
+		return errors.New("manifest signature is not valid hex")
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), canonicalManifestBytes(m), sig) {
+		return errors.New("manifest signature does not verify - refusing the update")
+	}
+	return nil
 }
 
 // UpdateInfo is returned to the frontend by CheckForUpdate.
@@ -426,6 +460,12 @@ func fetchManifest(ctx context.Context, client *http.Client) (*updateManifest, e
 	}
 	if mf.Version == "" || mf.URL == "" {
 		return nil, errors.New("invalid update manifest")
+	}
+	// Signature check BEFORE anything else uses the manifest: proves it was
+	// produced by the holder of the offline private key, not by whoever
+	// controls the website.
+	if err := verifyManifestSig(&mf); err != nil {
+		return nil, err
 	}
 	return &mf, nil
 }

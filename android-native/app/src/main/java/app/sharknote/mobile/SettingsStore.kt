@@ -24,8 +24,10 @@ class SettingsStore(context: Context) {
 
     fun load(): SharkSettings {
         if (!file.exists()) return SharkSettings()
+        val raw = file.readBytes()
+        val json = (NoteCrypto.decrypt(raw) ?: raw).toString(Charsets.UTF_8)
         return runCatching {
-            val o = JSONObject(file.readText())
+            val o = JSONObject(json)
             SharkSettings(
                 theme = o.optString("theme", "dark"),
                 accent = o.optString("accent", "violet"),
@@ -40,14 +42,15 @@ class SettingsStore(context: Context) {
 
     fun save(s: SharkSettings) {
         runCatching {
-            file.writeText(
-                JSONObject().apply {
-                    put("theme", s.theme); put("accent", s.accent)
-                    put("graphTheme", s.graphTheme); put("editorFontSize", s.editorFontSize.toDouble())
-                    put("autosaveDelay", s.autosaveDelay); put("confirmDelete", s.confirmDelete)
-                    put("defaultView", s.defaultView)
-                }.toString()
-            )
+            val json = JSONObject().apply {
+                put("theme", s.theme); put("accent", s.accent)
+                put("graphTheme", s.graphTheme); put("editorFontSize", s.editorFontSize.toDouble())
+                put("autosaveDelay", s.autosaveDelay); put("confirmDelete", s.confirmDelete)
+                put("defaultView", s.defaultView)
+            }.toString()
+            val tmp = File(file.parentFile, file.name + ".tmp")
+            tmp.writeBytes(NoteCrypto.encrypt(json.toByteArray()))
+            if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
         }
     }
 }

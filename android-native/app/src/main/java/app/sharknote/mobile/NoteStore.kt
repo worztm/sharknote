@@ -26,8 +26,12 @@ class NoteStore(context: Context) {
 
     init {
         if (file.exists()) {
+            val raw = file.readBytes()
+            // Transparent migration: plaintext files from <=0.3.0 are read,
+            // then rewritten encrypted on the first save.
+            val json = NoteCrypto.decrypt(raw) ?: raw
             runCatching {
-                val arr = JSONArray(file.readText())
+                val arr = JSONArray(json.toString(Charsets.UTF_8))
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     notes.add(
@@ -88,6 +92,12 @@ class NoteStore(context: Context) {
                 put("starred", n.starred); put("updatedAt", n.updatedAt)
             })
         }
-        file.writeText(arr.toString())
+        // Atomic write: temp file + rename, encrypted at rest.
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeBytes(NoteCrypto.encrypt(arr.toString().toByteArray()))
+        if (!tmp.renameTo(file)) {
+            file.delete()
+            tmp.renameTo(file)
+        }
     }
 }

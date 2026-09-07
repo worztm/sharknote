@@ -54,3 +54,8 @@ android-native/.idea/
 # Wails android template output (removed; native app lives in android-native/)
 build/android/
 android-native/build/
+
+# Release signing material - NEVER commit
+*.jks
+*.keystore
+android-native/keystore.properties
