@@ -39,6 +39,36 @@ func (a *AttachmentService) AttachPath(noteID int64, path string) (*Attachment, 
 	return a.store.AddAttachment(noteID, path)
 }
 
+// AttachMediaViaDialog opens the native picker limited to images/video and
+// returns ready-to-insert inline HTML for the note body ("" when cancelled).
+func (a *AttachmentService) AttachMediaViaDialog(noteID int64) (string, error) {
+	paths, err := pickMediaPath()
+	if err != nil {
+		return "", err
+	}
+	if len(paths) == 0 {
+		return "", nil
+	}
+	att, err := a.store.AddAttachment(noteID, paths[0])
+	if err != nil {
+		return "", err
+	}
+	return a.store.AttachmentInlineHTML(att)
+}
+
+// AttachMediaPath stores a dropped image/video and returns its inline HTML.
+// Non-media files return "" so the caller can fall back to the chip list.
+func (a *AttachmentService) AttachMediaPath(noteID int64, path string) (string, error) {
+	att, err := a.store.AddAttachment(noteID, path)
+	if err != nil {
+		return "", err
+	}
+	if !IsInlineMedia(att.Mime) {
+		return "", nil // stored as a file chip, not inline
+	}
+	return a.store.AttachmentInlineHTML(att)
+}
+
 // Remove deletes an attachment row and its stored file.
 func (a *AttachmentService) Remove(id int64) error {
 	return a.store.DeleteAttachment(id)

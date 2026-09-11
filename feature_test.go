@@ -2,10 +2,30 @@ package main
 
 import (
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestInlineMediaHTML(t *testing.T) {
+	a := &Attachment{ID: 1, Filename: `evil"><script>alert(1)</script>.png`, Mime: "image/png"}
+	html := InlineMediaHTML(a, "..\\..\\stuff\\abcdef.png")
+	if strings.Contains(html, "<script>") {
+		t.Fatalf("filename not escaped: %s", html)
+	}
+	if !strings.Contains(html, `src="/attachments/abcdef.png"`) {
+		t.Fatalf("stored token not reduced to base name: %s", html)
+	}
+	if strings.Contains(html, "..") {
+		t.Fatalf("path traversal leaked into url: %s", html)
+	}
+	v := &Attachment{ID: 2, Filename: "clip.mp4", Mime: "video/mp4"}
+	hv := InlineMediaHTML(v, "deadbeef.mp4")
+	if !strings.Contains(hv, "<video controls") || !strings.Contains(hv, "deadbeef.mp4") {
+		t.Fatalf("video html wrong: %s", hv)
+	}
+}
 
 func TestAttachmentLifecycle(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "sn.db")

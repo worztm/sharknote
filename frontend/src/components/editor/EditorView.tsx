@@ -5,6 +5,7 @@ import {
   CopyPlus,
   Eye,
   FilePenLine,
+  ImagePlus,
   Link2,
   Loader2,
   MoreHorizontal,
@@ -16,7 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import DOMPurify from "dompurify";
-import { NoteService } from "../../../bindings/sharknote";
+import { AttachmentService, NoteService } from "../../../bindings/sharknote";
 import type { Note, NoteSummary } from "../../../bindings/sharknote";
 import { Browser, Events } from "@wailsio/runtime";
 import {
@@ -408,7 +409,8 @@ export function EditorView({
     const el = editorRef.current;
     if (!el) return;
     el.innerHTML = DOMPurify.sanitize(contentRef.current, {
-      ADD_ATTR: ["contenteditable"], // keeps the frontmatter card read-only
+      // keeps the frontmatter card read-only; preserves inline media tags
+      ADD_ATTR: ["contenteditable", "controls", "preload", "loading", "poster"],
     });
     setWikiQuery(null);
     setCaretPos(null);
@@ -501,6 +503,64 @@ export function EditorView({
     setContent(html);
     scheduleSave();
   }, [scheduleSave]);
+
+  /** Inserts media HTML at the caret if the editor owns it, else appends. */
+  const insertMediaHTML = useCallback((html: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    const inEditor =
+      sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).startContainer);
+    el.focus();
+    if (!inEditor) {
+      // No usable caret inside this note: append at the end.
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    document.execCommand("insertHTML", false, html);
+    syncFromEditor();
+    setLinkRefreshKey((k) => k + 1);
+  }, [syncFromEditor]);
+
+  // Native picker: image/video inserted inline at the caret (stored copy).
+  const handleInsertMedia = useCallback(async () => {
+    try {
+      const html = await AttachmentService.AttachMediaViaDialog(noteId);
+      if (html) {
+        insertMediaHTML(html);
+        onToast("Media inserted into the note");
+      }
+    } catch (err) {
+      console.error("Insert media failed", err);
+      onToast("Couldn't attach that file");
+    }
+  }, [noteId, insertMediaHTML, onToast]);
+
+  // Files dropped onto the window (enabled via EnableFileDrop on the window):
+  // media go inline at the caret; anything else becomes a normal attachment.
+  useEffect(() => {
+    return Events.On("sharknote:files-dropped", async (ev) => {
+      const files = ev.data as string[] | null;
+      if (!files?.length) return;
+      for (const path of files) {
+        try {
+          const html = await AttachmentService.AttachMediaPath(noteId, path);
+          if (html) {
+            insertMediaHTML(html);
+          } else {
+            await AttachmentService.AttachPath(noteId, path);
+            onToast("File attached (see Files tab)");
+          }
+        } catch (err) {
+          console.error("drop attach failed", err);
+        }
+      }
+      setLinkRefreshKey((k) => k + 1);
+    });
+  }, [noteId, insertMediaHTML, onToast]);
 
   /** Measures the caret so the autocomplete popover follows it. */
   const measureCaret = useCallback((): { left: number; top: number } | null => {
@@ -1040,6 +1100,11 @@ export function EditorView({
                   role="menu"
                   className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-border bg-popover/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-xl"
                 >
+                  <MenuRow
+                    icon={ImagePlus}
+                    label="Insert image/video"
+                    onClick={() => runAction(() => void handleInsertMedia())}
+                  />
                   <MenuRow
                     icon={Link2}
                     label="Copy wiki link"

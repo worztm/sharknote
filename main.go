@@ -39,7 +39,7 @@ func main() {
 			application.NewService(todos),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler: attachmentFileServer(store, application.AssetFileServerFS(assets)),
 		},
 		// Declare .md as an associated file type: when Windows launches the
 		// app with a .md file (e.g. from "Open with"), Wails fires
@@ -75,12 +75,11 @@ func main() {
 		log.Printf("failed to register .md file association: %v", err)
 	}
 
-
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:   "Sharknote",
-		Width:   1150,
-		Height:  740,
-		MinWidth: 980,
+	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:     "Sharknote",
+		Width:     1150,
+		Height:    740,
+		MinWidth:  980,
 		MinHeight: 640,
 		// Medium, centered, normal-state window on every launch — the user
 		// resizes/maximizes/minimizes it however they like afterwards.
@@ -88,6 +87,10 @@ func main() {
 		StartState:       application.WindowStateNormal,
 		BackgroundColour: application.NewRGB(9, 9, 11),
 		URL:              "/",
+		// Files dragged from Explorer become attachments (images/video also
+		// insert inline at the caret; EditorView listens for sharknote:files-dropped).
+		EnableFileDrop: true,
+
 		// Keep the UI at a fixed zoom. Disables the WebView2 zoom control
 		// (Ctrl+wheel, Ctrl+plus/minus, pinch). The graph view has its own
 		// JS-driven zoom, which is unaffected by this setting.
@@ -96,6 +99,15 @@ func main() {
 			Theme: application.Dark,
 		},
 	})
+
+	// Forward native file drops to the frontend (EditorView inserts media
+	// inline / stores attachments). Window-scoped event; the JS runtime
+	// already gates this on EnableFileDrop.
+	if mainWindow != nil {
+		mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+			app.Event.Emit("sharknote:files-dropped", e.Context().DroppedFiles())
+		})
+	}
 
 	alarms.Start()
 	defer alarms.Stop()

@@ -167,19 +167,25 @@ func shellItemPath(item unsafe.Pointer) (string, error) {
 // showOpenFilesDialog shows a multi-select dialog restricted to markdown
 // files. Returns the picked paths, or nil, nil when the user cancels.
 func showOpenFilesDialog(owner uintptr, title string) ([]string, error) {
-	return showOpenDialog(owner, title, false)
+	return showOpenDialog(owner, title, false, false)
+}
+
+// showOpenMediaDialog shows a multi-select dialog restricted to image/video
+// files, for inserting media into a note body.
+func showOpenMediaDialog(owner uintptr, title string) ([]string, error) {
+	return showOpenDialog(owner, title, false, true)
 }
 
 // showOpenFolderDialog shows a single-selection folder picker. Returns the
 // picked folder, or nil, nil when the user cancels.
 func showOpenFolderDialog(owner uintptr, title string) ([]string, error) {
-	return showOpenDialog(owner, title, true)
+	return showOpenDialog(owner, title, true, false)
 }
 
 // showOpenDialog drives one IFileOpenDialog. With folderMode the dialog
 // selects a single folder (FOS_PICKFOLDERS); otherwise it multi-selects
 // files (filtered to markdown).
-func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, error) {
+func showOpenDialog(owner uintptr, title string, folderMode bool, mediaMode bool) ([]string, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	coInitialize()
@@ -223,11 +229,20 @@ func showOpenDialog(owner uintptr, title string, folderMode bool) ([]string, err
 	// Folder mode: label the confirm button accordingly. These pointers are
 	// used by the dialog while it is open, so they must survive the Show
 	// call below (see the KeepAlives at the end of the function).
-	var okLabel, mdName, mdSpec, allName, allSpec *uint16
+	var okLabel, mdName, mdSpec, allName, allSpec, mediaName, mediaSpec *uint16
 	var filters []comDlgFilterSpec
 	if folderMode {
 		okLabel, _ = windows.UTF16PtrFromString("Select folder")
 		syscall.SyscallN(vtbl.SetOkButtonLabel, uintptr(fd), uintptr(unsafe.Pointer(okLabel)))
+	} else if mediaMode {
+		mediaName, _ = windows.UTF16PtrFromString("Images and videos")
+		mediaSpec, _ = windows.UTF16PtrFromString("*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg;*.mp4;*.mov;*.webm;*.mkv;*.avi")
+		allName, _ = windows.UTF16PtrFromString("All files")
+		allSpec, _ = windows.UTF16PtrFromString("*.*")
+		filters = []comDlgFilterSpec{
+			{pszName: mediaName, pszSpec: mediaSpec},
+			{pszName: allName, pszSpec: allSpec},
+		}
 	} else {
 		mdName, _ = windows.UTF16PtrFromString("Markdown files")
 		mdSpec, _ = windows.UTF16PtrFromString("*.md")

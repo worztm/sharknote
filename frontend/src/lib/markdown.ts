@@ -446,7 +446,7 @@ export function enhanceCallouts(html: string): string {
  */
 export function renderRichContent(html: string): string {
   const clean = DOMPurify.sanitize(html, {
-    ADD_ATTR: ["data-wiki-target", "contenteditable", "data-callout", "data-mermaid", "data-mermaid-source"],
+    ADD_ATTR: ["data-wiki-target", "contenteditable", "data-callout", "data-mermaid", "data-mermaid-source", "controls", "preload", "loading", "poster"],
   });
   const doc = new DOMParser().parseFromString(`<body>${clean}</body>`, "text/html");
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);

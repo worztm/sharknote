@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -18,9 +18,7 @@ import * as $models from "./models.js";
  * CreateNote creates a note with the given title and content.
  */
 export function CreateNote(title: string, content: string): $CancellablePromise<$models.Note | null> {
-    return $Call.ByID(3901296041, title, content).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(3901296041, title, content);
 }
 
 /**
@@ -33,46 +31,36 @@ export function DeleteNote(id: number): $CancellablePromise<void> {
 /**
  * GetBacklinks lists the notes that link to a given note.
  */
-export function GetBacklinks(id: number): $CancellablePromise<$models.Backlink[]> {
-    return $Call.ByID(3613702605, id).then(($result: any) => {
-        return $$createType3($result);
-    });
+export function GetBacklinks(id: number): $CancellablePromise<$models.Backlink[] | null> {
+    return $Call.ByID(3613702605, id);
 }
 
 /**
  * GetGraph returns every note as a node and every resolved link as an edge.
  */
 export function GetGraph(): $CancellablePromise<$models.GraphData | null> {
-    return $Call.ByID(3565607809).then(($result: any) => {
-        return $$createType5($result);
-    });
+    return $Call.ByID(3565607809);
 }
 
 /**
  * GetNote returns the full record of a single note.
  */
 export function GetNote(id: number): $CancellablePromise<$models.Note | null> {
-    return $Call.ByID(1276837971, id).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(1276837971, id);
 }
 
 /**
  * GetOutgoingLinks lists the wiki links written inside a note.
  */
-export function GetOutgoingLinks(id: number): $CancellablePromise<$models.LinkInfo[]> {
-    return $Call.ByID(3162422950, id).then(($result: any) => {
-        return $$createType7($result);
-    });
+export function GetOutgoingLinks(id: number): $CancellablePromise<$models.LinkInfo[] | null> {
+    return $Call.ByID(3162422950, id);
 }
 
 /**
  * GetSettings returns the persisted user preferences.
  */
 export function GetSettings(): $CancellablePromise<$models.Settings> {
-    return $Call.ByID(2084625886).then(($result: any) => {
-        return $$createType8($result);
-    });
+    return $Call.ByID(2084625886);
 }
 
 /**
@@ -83,19 +71,15 @@ export function GetSettings(): $CancellablePromise<$models.Settings> {
  * creates duplicates.
  */
 export function ImportFile(path: string): $CancellablePromise<$models.Note | null> {
-    return $Call.ByID(3998441678, path).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(3998441678, path);
 }
 
 /**
  * ImportFiles imports a list of markdown files, returning the ids of the
  * notes that were created or updated (in the same order as the input).
  */
-export function ImportFiles(paths: string[]): $CancellablePromise<number[]> {
-    return $Call.ByID(3930147207, paths).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function ImportFiles(paths: string[] | null): $CancellablePromise<number[] | null> {
+    return $Call.ByID(3930147207, paths);
 }
 
 /**
@@ -103,19 +87,15 @@ export function ImportFiles(paths: string[]): $CancellablePromise<number[]> {
  * hidden folders like .git and .obsidian), sorted by path for stable
  * ordering. Returns the ids of all imported notes.
  */
-export function ImportFolder(dir: string): $CancellablePromise<number[]> {
-    return $Call.ByID(2785704156, dir).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function ImportFolder(dir: string): $CancellablePromise<number[] | null> {
+    return $Call.ByID(2785704156, dir);
 }
 
 /**
  * ListNotes returns all notes, most recently updated first.
  */
-export function ListNotes(): $CancellablePromise<$models.NoteSummary[]> {
-    return $Call.ByID(27288930).then(($result: any) => {
-        return $$createType11($result);
-    });
+export function ListNotes(): $CancellablePromise<$models.NoteSummary[] | null> {
+    return $Call.ByID(27288930);
 }
 
 /**
@@ -123,10 +103,8 @@ export function ListNotes(): $CancellablePromise<$models.NoteSummary[]> {
  * the picked files, and returns the ids of the notes that were created or
  * updated. Returns nil when the user cancels.
  */
-export function OpenFiles(): $CancellablePromise<number[]> {
-    return $Call.ByID(1051351432).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function OpenFiles(): $CancellablePromise<number[] | null> {
+    return $Call.ByID(1051351432);
 }
 
 /**
@@ -134,10 +112,8 @@ export function OpenFiles(): $CancellablePromise<number[]> {
  * inside it, and remembers the folder as the current vault. Used from the
  * "Open folder" button and the Settings dialog to pick the vault path.
  */
-export function OpenFolderDialog(): $CancellablePromise<number[]> {
-    return $Call.ByID(2671632665).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function OpenFolderDialog(): $CancellablePromise<number[] | null> {
+    return $Call.ByID(2671632665);
 }
 
 /**
@@ -145,9 +121,7 @@ export function OpenFolderDialog(): $CancellablePromise<number[]> {
  * pointed at the old title in other notes.
  */
 export function RenameNote(id: number, title: string): $CancellablePromise<$models.Note | null> {
-    return $Call.ByID(2999546831, id, title).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2999546831, id, title);
 }
 
 /**
@@ -158,18 +132,14 @@ export function RenameNote(id: number, title: string): $CancellablePromise<$mode
  * chosen by the file extension: .md, .html or .txt.
  */
 export function SaveNoteAs(id: number): $CancellablePromise<$models.SaveNoteResult | null> {
-    return $Call.ByID(951930592, id).then(($result: any) => {
-        return $$createType13($result);
-    });
+    return $Call.ByID(951930592, id);
 }
 
 /**
  * SearchNotes returns notes whose title or content matches the query.
  */
-export function SearchNotes(query: string): $CancellablePromise<$models.NoteSummary[]> {
-    return $Call.ByID(3427037650, query).then(($result: any) => {
-        return $$createType11($result);
-    });
+export function SearchNotes(query: string): $CancellablePromise<$models.NoteSummary[] | null> {
+    return $Call.ByID(3427037650, query);
 }
 
 /**
@@ -198,32 +168,12 @@ export function ToggleStar(id: number): $CancellablePromise<boolean> {
  * UpdateNote saves the title and content of a note, re-scanning its wiki links.
  */
 export function UpdateNote(id: number, title: string, content: string): $CancellablePromise<$models.Note | null> {
-    return $Call.ByID(163960476, id, title, content).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(163960476, id, title, content);
 }
 
 /**
  * UpdateSettings validates and persists the user preferences.
  */
 export function UpdateSettings(settings: $models.Settings): $CancellablePromise<$models.Settings> {
-    return $Call.ByID(1016301389, settings).then(($result: any) => {
-        return $$createType8($result);
-    });
+    return $Call.ByID(1016301389, settings);
 }
-
-// Private type creation functions
-const $$createType0 = $models.Note.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $models.Backlink.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.GraphData.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $models.LinkInfo.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = $models.Settings.createFrom;
-const $$createType9 = $Create.Array($Create.Any);
-const $$createType10 = $models.NoteSummary.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = $models.SaveNoteResult.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);

@@ -193,6 +193,16 @@ func (s *Store) AttachmentPath(id int64) (string, error) {
 	return p, nil
 }
 
+// AttachmentInlineHTML builds the embeddable media HTML for an attachment,
+// resolving its stored token internally.
+func (s *Store) AttachmentInlineHTML(a *Attachment) (string, error) {
+	stored, err := s.attachmentStored(a.ID)
+	if err != nil {
+		return "", err
+	}
+	return InlineMediaHTML(a, stored), nil
+}
+
 // DeleteAttachment removes the database row and the stored payload. The row
 // would cascade on note delete; payload cleanup happens here and in
 // pruneOrphanAttachments at startup.
@@ -235,6 +245,28 @@ func (s *Store) pruneOrphanAttachments() {
 			os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}
+}
+
+// InlineMediaHTML renders an image/video attachment as embeddable rich-text
+// HTML pointing at the /attachments asset route. stored is the random on-disk
+// token (never the user filename); the visible name is attribute-escaped so a
+// crafted filename cannot break out of the HTML.
+func InlineMediaHTML(a *Attachment, stored string) string {
+	escaped := strings.NewReplacer("&", "&amp;", "\"", "&quot;", "<", "&lt;", ">", "&gt;").Replace(filepath.Base(a.Filename))
+	token := filepath.Base(stored) // strip any path components defensively
+	if strings.HasPrefix(a.Mime, "video/") {
+		return fmt.Sprintf(
+			`<p><video controls preload="metadata" style="max-width:100%%;border-radius:8px" src="/attachments/%s" title="%s"></video></p>`,
+			token, escaped)
+	}
+	return fmt.Sprintf(
+		`<p><img src="/attachments/%s" alt="%s" style="max-width:100%%;border-radius:8px" loading="lazy" /></p>`,
+		token, escaped)
+}
+
+// IsInlineMedia reports whether a mime renders inside the note body.
+func IsInlineMedia(mime string) bool {
+	return strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "video/")
 }
 
 // mimeFromExt maps common extensions; anything else is application/octet-stream.

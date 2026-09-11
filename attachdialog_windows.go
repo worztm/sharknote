@@ -35,3 +35,8 @@ func openPathWithDefaultApp(path string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Start()
 }
+
+// pickMediaPath opens the native picker filtered to image/video files.
+func pickMediaPath() ([]string, error) {
+	return showOpenMediaDialog(dialogOwner(), "Insert image or video")
+}

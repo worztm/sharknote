@@ -3,19 +3,33 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
+ * AttachMediaPath stores a dropped image/video and returns its inline HTML.
+ * Non-media files return "" so the caller can fall back to the chip list.
+ */
+export function AttachMediaPath(noteID: number, path: string): $CancellablePromise<string> {
+    return $Call.ByID(2512589376, noteID, path);
+}
+
+/**
+ * AttachMediaViaDialog opens the native picker limited to images/video and
+ * returns ready-to-insert inline HTML for the note body ("" when cancelled).
+ */
+export function AttachMediaViaDialog(noteID: number): $CancellablePromise<string> {
+    return $Call.ByID(2425229857, noteID);
+}
+
+/**
  * AttachPath copies a known path (drag & drop from the OS gives real paths).
  */
 export function AttachPath(noteID: number, path: string): $CancellablePromise<$models.Attachment | null> {
-    return $Call.ByID(81366466, noteID, path).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(81366466, noteID, path);
 }
 
 /**
@@ -23,18 +37,14 @@ export function AttachPath(noteID: number, path: string): $CancellablePromise<$m
  * into the note's attachment store. Returns nil (no error) when cancelled.
  */
 export function AttachViaDialog(noteID: number): $CancellablePromise<$models.Attachment | null> {
-    return $Call.ByID(2744309699, noteID).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(2744309699, noteID);
 }
 
 /**
  * List returns the attachments of a note.
  */
-export function List(noteID: number): $CancellablePromise<$models.Attachment[]> {
-    return $Call.ByID(353701020, noteID).then(($result: any) => {
-        return $$createType2($result);
-    });
+export function List(noteID: number): $CancellablePromise<$models.Attachment[] | null> {
+    return $Call.ByID(353701020, noteID);
 }
 
 /**
@@ -58,8 +68,3 @@ export function Remove(id: number): $CancellablePromise<void> {
 export function SaveCopyPath(id: number): $CancellablePromise<string> {
     return $Call.ByID(3097576783, id);
 }
-
-// Private type creation functions
-const $$createType0 = $models.Attachment.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $Create.Array($$createType0);
