@@ -5,16 +5,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,30 +24,43 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /**
- * Todos tab: quick-add with alarm presets (the phone-appropriate equivalent
- * of the desktop datetime pickers), check off, delete. Alarms go through
- * AlarmScheduler so they fire even with the app closed.
+ * Todos tab. Alarm/due pickers are the real Material 3 DatePickerDialog +
+ * TimePicker (material3 1.4.0, already in the local gradle cache — no new
+ * dependency). Reminders are fired by AlarmManager notifications from
+ * AlarmScheduler.kt: androidx.core NotificationCompat over the system
+ * notification channel, i.e. genuine Android notifications, not in-app
+ * banners.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
     val sh = LocalShark.current
     val context = LocalContext.current
     var text by remember { mutableStateOf("") }
-    var alarmChoice by remember { mutableStateOf(0L) } // epoch millis, 0 = none
+    var alarmAt by remember { mutableStateOf(0L) } // epoch ms, 0 = none
+    var dueAt by remember { mutableStateOf(0L) }   // epoch ms, 0 = none
+    // "pick-alarm-date" | "pick-due-date" | "pick-alarm-time:<utcMillis>"
+    var picking by remember { mutableStateOf<String?>(null) }
     val todos = remember(dataVersion) { store.all }
+    val timeFmt = remember { SimpleDateFormat("EEE h:mm a", Locale.getDefault()) }
+    val dateFmt = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
 
     fun add() {
         val t = text.trim()
         if (t.isEmpty()) return
-        val now = System.currentTimeMillis()
-        val created = store.create(t, 0, alarmChoice)
-        if (alarmChoice > now) AlarmScheduler.schedule(context, created)
-        text = ""; alarmChoice = 0
+        val created = store.create(t, dueAt, alarmAt)
+        if (alarmAt > System.currentTimeMillis()) AlarmScheduler.schedule(context, created)
+        text = ""; alarmAt = 0; dueAt = 0
         onMutate()
     }
 
@@ -64,8 +77,8 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
                     value = text, onValueChange = { text = it }, singleLine = true,
                     textStyle = TextStyle(color = sh.text1, fontSize = 15.sp),
                     cursorBrush = SolidColor(sh.accent),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { add() }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { add() }),
                     modifier = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp),
                     decorationBox = { inner -> if (text.isEmpty()) Text("Add a todo…", color = sh.text2, fontSize = 15.sp) else inner() },
                 )
@@ -76,20 +89,18 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AlarmChip("No alarm", alarmChoice == 0L) { alarmChoice = 0 }
-                AlarmChip("In 1 hour", alarmChoice in (now()..now() + 3_600_000L) && alarmChoice > 0) {
-                    alarmChoice = now() + 3_600_000L
-                }
-                AlarmChip("Tonight 8pm", alarmChoice == tonightAt(20, 0)) { alarmChoice = tonightAt(20, 0) }
-                AlarmChip("Tomorrow 9am", alarmChoice == tomorrowAt(9, 0)) { alarmChoice = tomorrowAt(9, 0) }
+                AlarmChip("No alarm", alarmAt == 0L) { alarmAt = 0 }
+                AlarmChip("Tonight 8pm", alarmAt == tonightAt(20, 0)) { alarmAt = tonightAt(20, 0) }
+                AlarmChip("Tomorrow 9am", alarmAt == tomorrowAt(9, 0)) { alarmAt = tomorrowAt(9, 0) }
+                AlarmChip("Pick time…", false) { picking = "pick-alarm-date" }
+                AlarmChip("Due date…", false) { picking = "pick-due-date" }
             }
-            if (alarmChoice > 0) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Alarm: " + java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.getDefault())
-                        .format(java.util.Date(alarmChoice)),
-                    color = sh.accent, fontSize = 12.sp,
-                )
+            if (alarmAt > 0 || dueAt > 0) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (alarmAt > 0) WhenPill("Alarm · ${timeFmt.format(Date(alarmAt))}", sh) { alarmAt = 0 }
+                    if (dueAt > 0) WhenPill("Due · ${dateFmt.format(Date(dueAt))}", sh) { dueAt = 0 }
+                }
             }
         }
 
@@ -128,29 +139,80 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
                     Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Nothing to do", color = sh.text1, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(6.dp))
-                        Text("Add a todo above; pick an alarm and Sharknote will remind you.",
+                        Text("Add a todo above; set an alarm and Sharknote will remind you.",
                             color = sh.text2, fontSize = 13.sp)
                     }
                 }
             }
         }
     }
+
+    // --- Material 3 date picker (shared by alarm + due flows) -------------
+    val pickingState = picking
+    if (pickingState == "pick-alarm-date" || pickingState == "pick-due-date") {
+        val dateState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { picking = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    val d = dateState.selectedDateMillis
+                    if (d == null) { picking = null; return@TextButton }
+                    if (pickingState == "pick-due-date") {
+                        dueAt = utcMidnightToLocal(d)
+                        picking = null
+                    } else {
+                        picking = "pick-alarm-time:$d"
+                    }
+                }) { Text(if (pickingState == "pick-due-date") "Set" else "Next", color = sh.accent) }
+            },
+            dismissButton = { TextButton(onClick = { picking = null }) { Text("Cancel", color = sh.text2) } },
+        ) {
+            DatePicker(state = dateState)
+        }
+    }
+
+    // --- Material 3 time clock for the alarm (after the date was picked) --
+    if (pickingState != null && pickingState.startsWith("pick-alarm-time:")) {
+        val dayUtc = pickingState.substringAfter(':').toLongOrNull() ?: 0L
+        AlarmTimeDialog(dayUtc, onSet = { millis -> alarmAt = millis; picking = null },
+            onCancel = { picking = null })
+    }
 }
 
-private fun now() = System.currentTimeMillis()
-
-private fun tonightAt(hour: Int, minute: Int): Long {
-    val c = Calendar.getInstance()
-    c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); c.set(Calendar.SECOND, 0)
-    if (c.timeInMillis <= System.currentTimeMillis()) c.add(Calendar.DAY_OF_YEAR, 1)
-    return c.timeInMillis
-}
-
-private fun tomorrowAt(hour: Int, minute: Int): Long {
-    val c = Calendar.getInstance()
-    c.add(Calendar.DAY_OF_YEAR, 1)
-    c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); c.set(Calendar.SECOND, 0)
-    return c.timeInMillis
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlarmTimeDialog(dayUtcMillis: Long, onSet: (Long) -> Unit, onCancel: () -> Unit) {
+    val sh = LocalShark.current
+    val context = LocalContext.current
+    val dayCal = Calendar.getInstance().apply { timeInMillis = utcMidnightToLocal(dayUtcMillis) }
+    val timeState = rememberTimePickerState(
+        initialHour = 20, initialMinute = 0,
+        is24Hour = android.text.format.DateFormat.is24HourFormat(context),
+    )
+    AlertDialog(
+        onDismissRequest = onCancel,
+        containerColor = sh.surface2,
+        title = { Text("Alarm time", color = sh.text1, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                TimePicker(state = timeState)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val cal = Calendar.getInstance().apply {
+                    set(
+                        dayCal.get(Calendar.YEAR), dayCal.get(Calendar.MONTH), dayCal.get(Calendar.DAY_OF_MONTH),
+                        timeState.hour, timeState.minute, 0,
+                    )
+                    set(Calendar.MILLISECOND, 0)
+                    if (timeInMillis < System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
+                }
+                onSet(cal.timeInMillis)
+            }) { Text("Set alarm", color = sh.accent) }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel", color = sh.text2) } },
+    )
 }
 
 @Composable
@@ -169,8 +231,22 @@ private fun AlarmChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
+private fun WhenPill(label: String, sh: SharkPalette, onClear: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(sh.accent.copy(alpha = 0.12f))
+            .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = sh.accent, fontSize = 12.sp)
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Filled.Close, "clear", tint = sh.accent, modifier = Modifier.size(13.dp).clickable(onClick = onClear))
+    }
+}
+
+@Composable
 private fun TodoRow(t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: () -> Unit) {
-    val fmt = remember { java.text.SimpleDateFormat("EEE h:mm a", java.util.Locale.getDefault()) }
+    val fmt = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(sh.surface2)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -188,8 +264,16 @@ private fun TodoRow(t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: (
                 t.text, color = if (t.done) sh.text2.copy(alpha = 0.6f) else sh.text1,
                 fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
             )
-            if (t.alarmAt > 0 && !t.done) {
-                Text("alarm " + fmt.format(java.util.Date(t.alarmAt)), color = sh.text2, fontSize = 11.sp)
+            val parts = listOfNotNull(
+                if (t.dueAt > 0) "due ${fmt.format(Date(t.dueAt))}" else null,
+                if (t.alarmAt > 0 && !t.done) "alarm ${timeFmt.format(Date(t.alarmAt))}" else null,
+            )
+            if (parts.isNotEmpty()) {
+                val overdue = !t.done && t.dueAt > 0 && t.dueAt < System.currentTimeMillis()
+                Text(
+                    parts.joinToString(" · ") + if (overdue) " · overdue" else "",
+                    color = if (overdue) Color(0xFFF87171) else sh.text2, fontSize = 11.sp,
+                )
             }
         }
         Icon(
@@ -197,4 +281,27 @@ private fun TodoRow(t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: (
             modifier = Modifier.size(18.dp).clickable(onClick = onDelete),
         )
     }
+}
+
+/** The M3 date picker returns UTC midnight; land on 9am of that same calendar day locally. */
+private fun utcMidnightToLocal(utcMillis: Long): Long {
+    val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    return Calendar.getInstance().apply {
+        clear()
+        set(utc.get(Calendar.YEAR), utc.get(Calendar.MONTH), utc.get(Calendar.DAY_OF_MONTH), 9, 0, 0)
+    }.timeInMillis
+}
+
+private fun tonightAt(hour: Int, minute: Int): Long {
+    val c = Calendar.getInstance()
+    c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); c.set(Calendar.SECOND, 0)
+    if (c.timeInMillis <= System.currentTimeMillis()) c.add(Calendar.DAY_OF_YEAR, 1)
+    return c.timeInMillis
+}
+
+private fun tomorrowAt(hour: Int, minute: Int): Long {
+    val c = Calendar.getInstance()
+    c.add(Calendar.DAY_OF_YEAR, 1)
+    c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); c.set(Calendar.SECOND, 0)
+    return c.timeInMillis
 }

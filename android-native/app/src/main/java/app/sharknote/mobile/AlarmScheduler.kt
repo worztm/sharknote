@@ -102,7 +102,17 @@ class AlarmReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            AlarmScheduler.rescheduleAll(context)
+            // Receivers have a short lifecycle window: do the reschedule
+            // (file read + AlarmManager calls) on a worker thread so we
+            // never hit the broadcast timeout, then let go.
+            val pending = goAsync()
+            Thread {
+                try {
+                    AlarmScheduler.rescheduleAll(context)
+                } finally {
+                    pending.finish()
+                }
+            }.start()
         }
     }
 }
