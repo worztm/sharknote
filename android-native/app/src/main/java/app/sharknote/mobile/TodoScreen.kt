@@ -45,7 +45,11 @@ import java.util.TimeZone
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
+fun TodoScreen(
+    store: TodoStore, dataVersion: Int,
+    rescheduleTodoId: Long? = null,   // launched from a reminder: preselect this todo
+    onMutate: () -> Unit,
+) {
     val sh = LocalShark.current
     val context = LocalContext.current
     var text by remember { mutableStateOf("") }
@@ -53,7 +57,16 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
     var dueAt by remember { mutableStateOf(0L) }   // epoch ms, 0 = none
     // "pick-alarm-date" | "pick-due-date" | "pick-alarm-time:<utcMillis>"
     var picking by remember { mutableStateOf<String?>(null) }
+    var rescheduleFor by remember { mutableStateOf<Long?>(null) }
+    // Launched from a fired reminder notification: jump straight into rescheduling.
+    LaunchedEffect(rescheduleTodoId) {
+        if (rescheduleTodoId != null) {
+            rescheduleFor = rescheduleTodoId
+            picking = "pick-alarm-date"
+        }
+    }
     val todos = remember(dataVersion) { store.all }
+    val firedTodos = todos.filter { it.done && it.alarmFired && it.alarmAt > 0 }
     val timeFmt = remember { SimpleDateFormat("EEE h:mm a", Locale.getDefault()) }
     val dateFmt = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
 
@@ -122,7 +135,27 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
                     onDelete = { store.delete(t.id); AlarmScheduler.cancel(context, t.id); onMutate() },
                 )
             }
-            val done = todos.filter { it.done }
+            // Fired (auto-completed) alarms stay visible with a Reschedule action.
+            if (firedTodos.isNotEmpty()) {
+                item(key = "fired-hdr") {
+                    Text("Rang · reschedule or delete", color = sh.text2, fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp, top = 10.dp))
+                }
+                items(firedTodos, key = { "fired-${it.id}" }) { t ->
+                    TodoRow(
+                        t, sh,
+                        onToggle = {
+                            // tap the check again = reopen with same alarm time re-armed
+                            store.reschedule(t.id, t.alarmAt)
+                            store.get(t.id)?.let { AlarmScheduler.schedule(context, it) }
+                            onMutate()
+                        },
+                        onDelete = { store.delete(t.id); AlarmScheduler.cancel(context, t.id); onMutate() },
+                        onReschedule = { rescheduleFor = t.id; picking = "pick-alarm-date" },
+                    )
+                }
+            }
+            val done = todos.filter { it.done && !(it.alarmFired && it.alarmAt > 0) }
             if (done.isNotEmpty()) {
                 item(key = "done-hdr") {
                     Text("Done", color = sh.text2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
@@ -176,8 +209,22 @@ fun TodoScreen(store: TodoStore, dataVersion: Int, onMutate: () -> Unit) {
     // --- Material 3 time clock for the alarm (after the date was picked) --
     if (pickingState != null && pickingState.startsWith("pick-alarm-time:")) {
         val dayUtc = pickingState.substringAfter(':').toLongOrNull() ?: 0L
-        AlarmTimeDialog(dayUtc, onSet = { millis -> alarmAt = millis; picking = null },
-            onCancel = { picking = null })
+        AlarmTimeDialog(dayUtc, onSet = { millis ->
+            val target = rescheduleFor
+            if (target != null) {
+                store.reschedule(target, millis)
+                store.get(target)?.let { AlarmScheduler.schedule(context, it) }
+                rescheduleFor = null
+            } else {
+                alarmAt = millis
+            }
+            picking = null
+        }, onCancel = { picking = null; rescheduleFor = null })
+    }
+    // cancel mid-flow (dismiss of date step) clears the reschedule target
+    val pickNow = picking
+    LaunchedEffect(pickNow) {
+        if (pickNow == null) rescheduleFor = null
     }
 }
 
@@ -289,7 +336,10 @@ private fun WhenPill(label: String, sh: SharkPalette, onClear: () -> Unit) {
 }
 
 @Composable
-private fun TodoRow(t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun TodoRow(
+    t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: () -> Unit,
+    onReschedule: (() -> Unit)? = null,
+) {
     val fmt = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     Row(
@@ -320,6 +370,16 @@ private fun TodoRow(t: Todo, sh: SharkPalette, onToggle: () -> Unit, onDelete: (
                     color = if (overdue) Color(0xFFF87171) else sh.text2, fontSize = 11.sp,
                 )
             }
+        }
+        if (onReschedule != null) {
+            Text(
+                "Reschedule", color = sh.accent, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(50))
+                    .background(sh.accent.copy(alpha = 0.12f))
+                    .clickable(onClick = onReschedule)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+            Spacer(Modifier.width(8.dp))
         }
         Icon(
             Icons.Filled.Delete, "delete", tint = Color(0xFFF87171).copy(alpha = 0.8f),

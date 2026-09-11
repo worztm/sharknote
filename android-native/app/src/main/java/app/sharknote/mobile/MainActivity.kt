@@ -82,8 +82,13 @@ class MainActivity : ComponentActivity() {
         val attachStore = AttachmentStore(applicationContext)
         // Re-arm alarms that AlarmManager lost (reboot, force-stop).
         AlarmScheduler.rescheduleAll(this)
+        // ColorOS doze kills broadcast delivery unless we're exempted; ask once.
+        AlarmScheduler.requestIgnoreBatteryOptimizations(this)
+        // Tapping a reminder notification opens straight into rescheduling it.
+        val alarmTodoId = intent?.getLongExtra(AlarmScheduler.EXTRA_TODO_ID, -1L) ?: -1L
         setContent {
-            AppRoot(store, settingsStore, todoStore, attachStore)
+            AppRoot(store, settingsStore, todoStore, attachStore,
+                rescheduleTodoId = if (alarmTodoId > 0) alarmTodoId else null)
         }
     }
 }
@@ -99,10 +104,11 @@ private sealed interface Screen {
 private fun AppRoot(
     store: NoteStore, settingsStore: SettingsStore,
     todoStore: TodoStore, attachStore: AttachmentStore,
+    rescheduleTodoId: Long? = null,
 ) {
     var settings by remember { mutableStateOf(settingsStore.load()) }
     var screen by remember { mutableStateOf<Screen>(Screen.List) }
-    var tab by remember { mutableStateOf(Tab.Notes) }
+    var tab by remember { mutableStateOf(if (rescheduleTodoId != null) Tab.Todos else Tab.Notes) }
     // bump after any mutation so list/graph re-read the store
     var dataVersion by remember { mutableIntStateOf(0) }
 
@@ -133,7 +139,8 @@ private fun AppRoot(
                     Box(Modifier.fillMaxSize()) {
                         when (tab) {
                             Tab.Notes -> NoteListScreen(store, attachStore, dataVersion, settings.confirmDelete, onOpen = { screen = Screen.Edit(it) }, onMutate = { dataVersion++ })
-                            Tab.Todos -> TodoScreen(todoStore, dataVersion, onMutate = { dataVersion++ })
+                            Tab.Todos -> TodoScreen(todoStore, dataVersion, rescheduleTodoId,
+                                onMutate = { dataVersion++ })
                             Tab.Graph -> GraphScreen(store, dataVersion, settings.graphTheme, onOpen = { screen = Screen.Edit(it) })
                             Tab.Settings -> SettingsScreen(settings, onChange = { settings = it; settingsStore.save(it) })
                         }

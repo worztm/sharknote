@@ -13,6 +13,7 @@ data class Todo(
     var dueAt: Long,
     var alarmAt: Long,
     var createdAt: Long,
+    var alarmFired: Boolean = false,
 )
 
 /**
@@ -40,6 +41,7 @@ class TodoStore(context: Context) {
                             dueAt = o.getLong("dueAt"),
                             alarmAt = o.getLong("alarmAt"),
                             createdAt = o.getLong("createdAt"),
+                            alarmFired = if (o.has("alarmFired")) o.getBoolean("alarmFired") else false,
                         )
                     )
                     if (o.getLong("id") >= nextId) nextId = o.getLong("id") + 1
@@ -59,6 +61,8 @@ class TodoStore(context: Context) {
     fun pendingAlarms(now: Long): List<Todo> =
         items.filter { !it.done && it.alarmAt > 0 && it.alarmAt <= now }
 
+    fun get(id: Long): Todo? = items.find { it.id == id }
+
     fun create(text: String, dueAt: Long, alarmAt: Long): Todo {
         val t = Todo(nextId++, text.trim(), false, dueAt, alarmAt, System.currentTimeMillis())
         items.add(t)
@@ -68,6 +72,18 @@ class TodoStore(context: Context) {
 
     fun setDone(id: Long, done: Boolean) {
         items.find { it.id == id }?.let { it.done = done; save() }
+    }
+
+    /** The alarm went off: auto-complete the todo (issue: done on delivery). */
+    fun markAlarmDone(id: Long) {
+        items.find { it.id == id }?.let { it.done = true; it.alarmFired = true; save() }
+    }
+
+    /** User moved the alarm: reopen the todo and clear the fired state. */
+    fun reschedule(id: Long, alarmAt: Long) {
+        items.find { it.id == id }?.let {
+            it.alarmAt = alarmAt; it.done = false; it.alarmFired = false; save()
+        }
     }
 
     fun delete(id: Long) {
@@ -81,6 +97,7 @@ class TodoStore(context: Context) {
             arr.put(JSONObject().apply {
                 put("id", t.id); put("text", t.text); put("done", t.done)
                 put("dueAt", t.dueAt); put("alarmAt", t.alarmAt); put("createdAt", t.createdAt)
+                put("alarmFired", t.alarmFired)
             })
         }
         val tmp = File(file.parentFile, file.name + ".tmp")
