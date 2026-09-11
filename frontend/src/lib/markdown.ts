@@ -248,32 +248,7 @@ marked.use(
   })
 );
 
-export interface WikiLinkToken {
-  target: string; // note title the link resolves to
-  alias: string; // display text
-  raw: string; // full inner text of the [[...]]
-}
-
 const WIKI_LINK_RE = /\[\[([^\[\]]+)\]\]/g;
-
-/** Extracts all wiki-link tokens from raw note content. */
-export function extractWikiLinks(content: string): WikiLinkToken[] {
-  const out: WikiLinkToken[] = [];
-  const seen = new Set<string>();
-  let m: RegExpExecArray | null;
-  WIKI_LINK_RE.lastIndex = 0;
-  while ((m = WIKI_LINK_RE.exec(content)) !== null) {
-    const inner = m[1].trim();
-    let [target, alias] = inner.split("|");
-    target = (target || "").trim();
-    alias = (alias || target).trim();
-    const key = target.toLowerCase();
-    if (!target || seen.has(key)) continue;
-    seen.add(key);
-    out.push({ target, alias, raw: inner });
-  }
-  return out;
-}
 
 /**
  * True when the stored content is already rich text (HTML) rather than

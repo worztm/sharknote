@@ -204,11 +204,6 @@ func writePendingUpdate(p pendingUpdate) {
 	}
 }
 
-// CurrentVersion reports the running app version.
-func (u *UpdaterService) CurrentVersion() string {
-	return AppVersion
-}
-
 // CheckForUpdate fetches the published manifest and compares it with the
 // running version. A network failure is returned as an error so the UI can
 // stay silent instead of nagging.
