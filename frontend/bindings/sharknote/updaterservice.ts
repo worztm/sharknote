@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -29,14 +29,9 @@ export function ApplyUpdate(): $CancellablePromise<void> {
  * stay silent instead of nagging.
  */
 export function CheckForUpdate(): $CancellablePromise<$models.UpdateInfo | null> {
-    return $Call.ByID(596274054);
-}
-
-/**
- * CurrentVersion reports the running app version.
- */
-export function CurrentVersion(): $CancellablePromise<string> {
-    return $Call.ByID(2650752423);
+    return $Call.ByID(596274054).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
 
 /**
@@ -47,3 +42,7 @@ export function CurrentVersion(): $CancellablePromise<string> {
 export function DownloadUpdate(): $CancellablePromise<void> {
     return $Call.ByID(2793849185);
 }
+
+// Private type creation functions
+const $$createType0 = $models.UpdateInfo.createFrom;
+const $$createType1 = $Create.Nullable($$createType0);

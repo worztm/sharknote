@@ -189,6 +189,10 @@ func (s *Store) migrate() {
 			}
 		}
 	}
+	if err := s.ensureAttachmentSchema(); err != nil {
+		log.Printf("attachment/todo schema migration failed: %v", err)
+	}
+	s.pruneOrphanAttachments()
 }
 
 // checkIntegrity runs a quick structural check of the database and logs a

@@ -25,6 +25,9 @@ func main() {
 
 	service := NewNoteService(store)
 	updater := NewUpdaterService()
+	alarms := NewTodoAlarms(store)
+	attach := NewAttachmentService(store)
+	todos := NewTodoService(store, alarms)
 
 	app := application.New(application.Options{
 		Name:        "Sharknote",
@@ -32,6 +35,8 @@ func main() {
 		Services: []application.Service{
 			application.NewService(service),
 			application.NewService(updater),
+			application.NewService(attach),
+			application.NewService(todos),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -91,6 +96,9 @@ func main() {
 			Theme: application.Dark,
 		},
 	})
+
+	alarms.Start()
+	defer alarms.Stop()
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

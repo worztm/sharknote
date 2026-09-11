@@ -18,7 +18,7 @@ import {
 import DOMPurify from "dompurify";
 import { NoteService } from "../../../bindings/sharknote";
 import type { Note, NoteSummary } from "../../../bindings/sharknote";
-import { Browser } from "@wailsio/runtime";
+import { Browser, Events } from "@wailsio/runtime";
 import {
   extractHeadings,
   findWikiQuery,
@@ -34,6 +34,7 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { FormatMenu, type FormatCommand } from "./FormatMenu";
 import { LinkPanel } from "./LinkPanel";
+import type { SidePanelTab } from "./LinkPanel";
 
 type SaveState = "saved" | "dirty" | "saving";
 
@@ -281,8 +282,14 @@ export function EditorView({
   // in the user's preferred default view.
   const [preview, setPreview] = useState(defaultView !== "edit");
   const [panelOpen, setPanelOpen] = useState(true);
-  const [panelTab, setPanelTab] = useState<"links" | "outline">("links");
+  const [panelTab, setPanelTab] = useState<SidePanelTab>("links");
   const [linkRefreshKey, setLinkRefreshKey] = useState(0);
+
+  // A todo alarm fired in the backend (Go already raised the native toast);
+  // bump the panel refresh key so the alarm state updates in the open panel.
+  useEffect(() => {
+    return Events.On("todos:alarm", () => setLinkRefreshKey((k) => k + 1));
+  }, []);
 
   // Wiki-link autocomplete
   const [wikiQuery, setWikiQuery] = useState<{ start: number; query: string } | null>(null);

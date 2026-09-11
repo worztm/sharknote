@@ -3,12 +3,18 @@ import {
   CornerDownRight,
   Link2,
   ListTree,
+  Paperclip,
   Plus,
+  SquareCheckBig,
 } from "lucide-react";
 import { NoteService } from "../../../bindings/sharknote";
 import type { Backlink, LinkInfo } from "../../../bindings/sharknote";
 import { cn } from "../../lib/utils";
 import type { HeadingEntry } from "../../lib/markdown";
+import { AttachmentsPanel } from "./AttachmentsPanel";
+import { TodoPanel } from "./TodoPanel";
+
+export type SidePanelTab = "links" | "outline" | "todos" | "files";
 
 interface LinkPanelProps {
   noteId: number;
@@ -17,10 +23,17 @@ interface LinkPanelProps {
   onCreateNote: (title: string) => void;
   /** h1–h3 outline of the open note. */
   outline: HeadingEntry[];
-  panelTab: "links" | "outline";
-  onPanelTabChange: (tab: "links" | "outline") => void;
+  panelTab: SidePanelTab;
+  onPanelTabChange: (tab: SidePanelTab) => void;
   onJumpToHeading: (index: number) => void;
 }
+
+const TABS: { id: SidePanelTab; label: string; icon: typeof Link2 }[] = [
+  { id: "links", label: "Links", icon: Link2 },
+  { id: "outline", label: "Outline", icon: ListTree },
+  { id: "todos", label: "Todos", icon: SquareCheckBig },
+  { id: "files", label: "Files", icon: Paperclip },
+];
 
 export function LinkPanel({
   noteId,
@@ -32,6 +45,7 @@ export function LinkPanel({
   onPanelTabChange,
   onJumpToHeading,
 }: LinkPanelProps) {
+  const [refresh, setRefresh] = useState(0);
   const [outgoing, setOutgoing] = useState<LinkInfo[]>([]);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -60,34 +74,32 @@ export function LinkPanel({
     <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/40">
       <div className="flex border-b border-border px-4 py-3">
         <div className="flex flex-1 items-center gap-0.5 rounded-lg border border-border bg-secondary/40 p-0.5">
-          <button
-            onClick={() => onPanelTabChange("links")}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition",
-              panelTab === "links"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Link2 className="size-3.5" />
-            Links
-          </button>
-          <button
-            onClick={() => onPanelTabChange("outline")}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium transition",
-              panelTab === "outline"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ListTree className="size-3.5" />
-            Outline
-          </button>
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => onPanelTabChange(id)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition",
+                panelTab === id
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {panelTab === "outline" ? (
+      {panelTab === "todos" && (
+        <TodoPanel noteId={noteId} refreshKey={refreshKey + refresh} onChanged={() => setRefresh((r) => r + 1)} />
+      )}
+      {panelTab === "files" && (
+        <AttachmentsPanel noteId={noteId} refreshKey={refreshKey + refresh} onChanged={() => setRefresh((r) => r + 1)} />
+      )}
+
+      {panelTab === "outline" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <Section
             title="Outline"
@@ -120,7 +132,8 @@ export function LinkPanel({
             ))}
           </Section>
         </div>
-      ) : (
+      )}
+      {panelTab === "links" && (
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {/* Outgoing links */}
         <Section
@@ -203,7 +216,7 @@ export function LinkPanel({
       </div>
       )}
 
-      {!loaded && (
+      {panelTab === "links" && !loaded && (
         <div className="pointer-events-none absolute inset-0 animate-pulse bg-card/20" />
       )}
     </aside>
