@@ -37,7 +37,12 @@ export function TodoPanel({
   const [showWhen, setShowWhen] = useState(false);
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {

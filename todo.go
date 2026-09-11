@@ -56,27 +56,38 @@ func scanTodo(row interface{ Scan(...any) error }) (*Todo, error) {
 
 const todoCols = "id, note_id, text, done, due_at, alarm_at, alarm_fired, created_at, completed_at"
 
-// CreateTodo validates and stores a todo. alarmAt, when set, must be in the
-// future and not wildly before dueAt.
+// CreateTodo validates and stores a todo. dueAt/alarmAt are normalized to
+// UTC RFC3339 before storage so the lexicographic alarm comparison holds.
 func (s *Store) CreateTodo(noteID int64, text, dueAt, alarmAt string) (*Todo, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("todo text is empty")
 	}
-	if _, err := parseISOOpt(dueAt); err != nil {
+	due, err := parseISOOpt(dueAt)
+	if err != nil {
 		return nil, fmt.Errorf("due date: %w", err)
 	}
-	if _, err := parseISOOpt(alarmAt); err != nil {
+	alarm, err := parseISOOpt(alarmAt)
+	if err != nil {
 		return nil, fmt.Errorf("alarm: %w", err)
 	}
 	res, err := s.db.Exec(
 		"INSERT INTO todos (note_id, text, due_at, alarm_at, created_at) VALUES (?, ?, ?, ?, ?)",
-		noteID, text, dueAt, alarmAt, nowISO())
+		noteID, text, normISO(due), normISO(alarm), nowISO())
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	return s.GetTodo(id)
+}
+
+// normISO renders a parsed time as UTC RFC3339 (second precision), or "" for
+// nil, so every stored timestamp shares one comparable byte format.
+func normISO(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 func (s *Store) GetTodo(id int64) (*Todo, error) {
@@ -133,7 +144,8 @@ func (s *Store) UpdateTodo(id int64, text, dueAt, alarmAt string) (*Todo, error)
 	if text == "" {
 		return nil, errors.New("todo text is empty")
 	}
-	if _, err := parseISOOpt(dueAt); err != nil {
+	due, err := parseISOOpt(dueAt)
+	if err != nil {
 		return nil, fmt.Errorf("due date: %w", err)
 	}
 	alarm, err := parseISOOpt(alarmAt)
@@ -149,7 +161,7 @@ func (s *Store) UpdateTodo(id int64, text, dueAt, alarmAt string) (*Todo, error)
 	}
 	_, err = s.db.Exec(
 		"UPDATE todos SET text = ?, due_at = ?, alarm_at = ?, alarm_fired = ? WHERE id = ?",
-		text, dueAt, alarmAt, fired, id)
+		text, normISO(due), normISO(alarm), fired, id)
 	if err != nil {
 		return nil, err
 	}

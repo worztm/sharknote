@@ -2,8 +2,8 @@ package main
 
 import (
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +24,43 @@ func TestInlineMediaHTML(t *testing.T) {
 	hv := InlineMediaHTML(v, "deadbeef.mp4")
 	if !strings.Contains(hv, "<video controls") || !strings.Contains(hv, "deadbeef.mp4") {
 		t.Fatalf("video html wrong: %s", hv)
+	}
+}
+
+func TestTodoTimezoneNormalization(t *testing.T) {
+	t.Setenv("SHARKNOTE_NO_TOAST", "1")
+	dbPath := filepath.Join(t.TempDir(), "sn.db")
+	st, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// An offset-bearing RFC3339 alarm (real -07:00 zone, 2h ago) is due now.
+	offsetDue := time.Now().Add(-2 * time.Hour).In(time.FixedZone("TEST-7", -7*3600)).Format(time.RFC3339)
+	td, err := st.CreateTodo(0, "tz", "", offsetDue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(td.AlarmAt, "Z") {
+		t.Fatalf("alarm stored un-normalized: %q", td.AlarmAt)
+	}
+	al := NewTodoAlarms(st)
+	fired := 0
+	al.OnFire(func(Todo) { fired++ })
+	al.tick()
+	if fired != 1 {
+		t.Fatalf("offset alarm not caught after normalization (fired=%d)", fired)
+	}
+	// A future alarm expressed in a +11:00 zone must NOT fire.
+	future := time.Now().Add(7 * time.Hour).In(time.FixedZone("TEST+11", 11*3600)).Format(time.RFC3339)
+	if _, err := st.CreateTodo(0, "later", "", future); err != nil {
+		t.Fatal(err)
+	}
+	fired = 0
+	al.tick()
+	if fired != 0 {
+		t.Fatalf("future alarm fired early: %d", fired)
 	}
 }
 

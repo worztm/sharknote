@@ -43,7 +43,12 @@ export function AttachmentsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
