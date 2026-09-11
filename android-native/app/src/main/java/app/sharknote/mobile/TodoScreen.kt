@@ -2,6 +2,8 @@ package app.sharknote.mobile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -185,16 +187,59 @@ private fun AlarmTimeDialog(dayUtcMillis: Long, onSet: (Long) -> Unit, onCancel:
     val sh = LocalShark.current
     val context = LocalContext.current
     val dayCal = Calendar.getInstance().apply { timeInMillis = utcMidnightToLocal(dayUtcMillis) }
+    val isToday = Calendar.getInstance().get(Calendar.DAY_OF_YEAR) == dayCal.get(Calendar.DAY_OF_YEAR) &&
+        Calendar.getInstance().get(Calendar.YEAR) == dayCal.get(Calendar.YEAR)
+    // Sensible default instead of a blank dial: now+30m (rounded to 5) if the
+    // picked day is today, else 9:00.
+    val defaultCal = Calendar.getInstance().apply {
+        if (isToday) {
+            add(Calendar.MINUTE, 30)
+            set(Calendar.MINUTE, (get(Calendar.MINUTE) / 5) * 5)
+        } else set(Calendar.HOUR_OF_DAY, 9)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
     val timeState = rememberTimePickerState(
-        initialHour = 20, initialMinute = 0,
+        initialHour = defaultCal.get(Calendar.HOUR_OF_DAY),
+        initialMinute = defaultCal.get(Calendar.MINUTE),
         is24Hour = android.text.format.DateFormat.is24HourFormat(context),
     )
+    val previewFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val preview = Calendar.getInstance().apply {
+        set(dayCal.get(Calendar.YEAR), dayCal.get(Calendar.MONTH), dayCal.get(Calendar.DAY_OF_MONTH),
+            timeState.hour, timeState.minute, 0)
+    }.time
     AlertDialog(
         onDismissRequest = onCancel,
         containerColor = sh.surface2,
-        title = { Text("Alarm time", color = sh.text1, fontWeight = FontWeight.SemiBold) },
+        title = {
+            Column {
+                Text("Alarm time", color = sh.text1, fontWeight = FontWeight.SemiBold)
+                Text(
+                    (if (isToday) "Today · " else dayCal.getTime().let { SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(it) } + " · ") +
+                        previewFmt.format(preview),
+                    color = sh.accent, fontSize = 14.sp,
+                )
+            }
+        },
         text = {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // Quick-set row first: most reminders are "in a bit" or "tonight".
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AlarmChip("+10 min", false) {
+                        val c = Calendar.getInstance().apply { add(Calendar.MINUTE, 10) }
+                        timeState.hour = c.get(Calendar.HOUR_OF_DAY); timeState.minute = c.get(Calendar.MINUTE)
+                    }
+                    AlarmChip("+1 h", false) {
+                        val c = Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, 1) }
+                        timeState.hour = c.get(Calendar.HOUR_OF_DAY); timeState.minute = c.get(Calendar.MINUTE)
+                    }
+                    AlarmChip("8 pm", false) { timeState.hour = 20; timeState.minute = 0 }
+                    AlarmChip("9 am", false) { timeState.hour = 9; timeState.minute = 0 }
+                }
+                Spacer(Modifier.height(10.dp))
                 TimePicker(state = timeState)
             }
         },
