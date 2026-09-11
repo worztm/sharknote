@@ -122,7 +122,7 @@ fun SettingsScreen(settings: SharkSettings, onChange: (SharkSettings) -> Unit) {
         Section("About") {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 Text("Version", color = sh.text1, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text("0.3.1 native", color = sh.text2, fontSize = 13.sp)
+                Text(BuildConfig.VERSION_NAME + " native", color = sh.text2, fontSize = 13.sp)
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 Text("Storage", color = sh.text1, fontSize = 15.sp, modifier = Modifier.weight(1f))
