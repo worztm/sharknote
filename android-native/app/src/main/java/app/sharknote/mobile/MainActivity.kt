@@ -1,5 +1,6 @@
 package app.sharknote.mobile
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -18,6 +19,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -32,12 +36,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -51,15 +67,28 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
+        if (Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100
+            )
+        }
         val store = NoteStore(applicationContext)
         val settingsStore = SettingsStore(applicationContext)
+        val todoStore = TodoStore(applicationContext)
+        val attachStore = AttachmentStore(applicationContext)
+        // Re-arm alarms that AlarmManager lost (reboot, force-stop).
+        AlarmScheduler.rescheduleAll(this)
         setContent {
-            AppRoot(store, settingsStore)
+            AppRoot(store, settingsStore, todoStore, attachStore)
         }
     }
 }
 
-private enum class Tab { Notes, Graph, Settings }
+private enum class Tab { Notes, Todos, Graph, Settings }
 
 private sealed interface Screen {
     data object List : Screen
@@ -67,7 +96,10 @@ private sealed interface Screen {
 }
 
 @Composable
-private fun AppRoot(store: NoteStore, settingsStore: SettingsStore) {
+private fun AppRoot(
+    store: NoteStore, settingsStore: SettingsStore,
+    todoStore: TodoStore, attachStore: AttachmentStore,
+) {
     var settings by remember { mutableStateOf(settingsStore.load()) }
     var screen by remember { mutableStateOf<Screen>(Screen.List) }
     var tab by remember { mutableStateOf(Tab.Notes) }
@@ -92,7 +124,7 @@ private fun AppRoot(store: NoteStore, settingsStore: SettingsStore) {
                 val s = screen
                 if (s is Screen.Edit) {
                     EditorScreen(
-                        store, s.noteId, settings, dataVersion,
+                        store, attachStore, s.noteId, settings, dataVersion,
                         onClose = { screen = Screen.List; dataVersion++ },
                         onMutate = { dataVersion++ },
                     )
@@ -100,7 +132,8 @@ private fun AppRoot(store: NoteStore, settingsStore: SettingsStore) {
                     // Box so the FAB floats above the content, bar above insets.
                     Box(Modifier.fillMaxSize()) {
                         when (tab) {
-                            Tab.Notes -> NoteListScreen(store, dataVersion, settings.confirmDelete, onOpen = { screen = Screen.Edit(it) }, onMutate = { dataVersion++ })
+                            Tab.Notes -> NoteListScreen(store, attachStore, dataVersion, settings.confirmDelete, onOpen = { screen = Screen.Edit(it) }, onMutate = { dataVersion++ })
+                            Tab.Todos -> TodoScreen(todoStore, dataVersion, onMutate = { dataVersion++ })
                             Tab.Graph -> GraphScreen(store, dataVersion, settings.graphTheme, onOpen = { screen = Screen.Edit(it) })
                             Tab.Settings -> SettingsScreen(settings, onChange = { settings = it; settingsStore.save(it) })
                         }
@@ -141,6 +174,12 @@ private fun BoxScope.SharkBottomBar(tab: Tab, onSelect: (Tab) -> Unit) {
             selected = tab == Tab.Notes, onClick = { onSelect(Tab.Notes) },
             icon = { Icon(NotesIcon, null, modifier = Modifier.size(22.dp)) },
             label = { Text("Notes", fontSize = 11.sp) },
+            colors = navItemColors(sh),
+        )
+        NavigationBarItem(
+            selected = tab == Tab.Todos, onClick = { onSelect(Tab.Todos) },
+            icon = { Icon(Icons.Filled.Check, null, modifier = Modifier.size(22.dp)) },
+            label = { Text("Todos", fontSize = 11.sp) },
             colors = navItemColors(sh),
         )
         NavigationBarItem(
@@ -188,7 +227,7 @@ private fun NewNoteDialog(onCancel: () -> Unit, onCreate: (String) -> Unit) {
 }
 
 @Composable
-private fun NoteListScreen(store: NoteStore, dataVersion: Int, confirmDelete: Boolean, onOpen: (Long) -> Unit, onMutate: () -> Unit) {
+private fun NoteListScreen(store: NoteStore, attachStore: AttachmentStore, dataVersion: Int, confirmDelete: Boolean, onOpen: (Long) -> Unit, onMutate: () -> Unit) {
     val sh = LocalShark.current
     var query by remember { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<Long?>(null) }
@@ -230,7 +269,7 @@ private fun NoteListScreen(store: NoteStore, dataVersion: Int, confirmDelete: Bo
                     onDelete = {
                         menuFor = null
                         if (confirmDelete) pendingDelete = n.id
-                        else { store.delete(n.id); onMutate() }
+                        else { store.delete(n.id); attachStore.purgeNote(n.id); onMutate() }
                     },
                 )
             }
@@ -259,7 +298,7 @@ private fun NoteListScreen(store: NoteStore, dataVersion: Int, confirmDelete: Bo
             title = { Text("Delete note?", color = sh.text1, fontWeight = FontWeight.SemiBold) },
             text = { Text("\"${n?.title?.ifBlank { "Untitled" } ?: ""}\" will be removed. This cannot be undone.", color = sh.text2, fontSize = 14.sp) },
             confirmButton = {
-                TextButton(onClick = { store.delete(delId); pendingDelete = null; onMutate() }) {
+                TextButton(onClick = { store.delete(delId); attachStore.purgeNote(delId); pendingDelete = null; onMutate() }) {
                     Text("Delete", color = Color(0xFFF87171), fontWeight = FontWeight.SemiBold)
                 }
             },
@@ -321,13 +360,30 @@ private fun NoteRow(
 }
 
 @Composable
-private fun EditorScreen(store: NoteStore, noteId: Long, settings: SharkSettings, dataVersion: Int, onClose: () -> Unit, onMutate: () -> Unit) {
+private fun EditorScreen(store: NoteStore, attachStore: AttachmentStore, noteId: Long, settings: SharkSettings, dataVersion: Int, onClose: () -> Unit, onMutate: () -> Unit) {
     val sh = LocalShark.current
     val note = remember { store.get(noteId) } ?: run { onClose(); return }
     var title by remember { mutableStateOf(TextFieldValue(note.title)) }
     var content by remember { mutableStateOf(TextFieldValue(note.content)) }
+    // Star must be local Compose state: reading store.get() inside the Icon
+    // tint is not observable, so toggling never recomposed the button
+    // (the "favorite does nothing" bug).
+    var starred by remember { mutableStateOf(note.starred) }
     var preview by remember { mutableStateOf(settings.defaultView == "preview") }
     val fmt = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var attachments by remember(noteId) { mutableStateOf(attachStore.forNote(noteId)) }
+    val pickMedia = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(10)
+    ) { uris ->
+        uris.forEach { uri ->
+            scope.launch(Dispatchers.IO) {
+                attachStore.attach(context, noteId, uri)
+                attachments = attachStore.forNote(noteId)
+            }
+        }
+    }
 
     fun save() {
         if (store.get(noteId) != null) store.update(noteId, title = title.text, content = content.text)
@@ -348,9 +404,12 @@ private fun EditorScreen(store: NoteStore, noteId: Long, settings: SharkSettings
             Column(Modifier.weight(1f)) {
                 Text(fmt.format(Date(note.updatedAt)), color = sh.text2, fontSize = 11.sp)
             }
-            IconButton(onClick = { save(); store.toggleStar(noteId); onMutate() }) {
-                Icon(Icons.Filled.Star, "star", tint = if (store.get(noteId)?.starred == true) sh.accent else sh.text2)
+            IconButton(onClick = { save(); starred = !starred; store.toggleStar(noteId); onMutate() }) {
+                Icon(Icons.Filled.Star, "star", tint = if (starred) sh.accent else sh.text2)
             }
+            IconButton(onClick = {
+                pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }) { Icon(PaperclipIcon, "attach", tint = sh.text2) }
             IconButton(onClick = { preview = !preview }) {
                 Icon(if (preview) Icons.Filled.Edit else EyeIcon, "toggle preview", tint = if (preview) sh.accent else sh.text2)
             }
@@ -381,19 +440,98 @@ private fun EditorScreen(store: NoteStore, noteId: Long, settings: SharkSettings
                 cursorBrush = SolidColor(sh.accent),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             )
-            BasicTextField(
-                value = content, onValueChange = { content = it },
-                textStyle = TextStyle(color = sh.text1, fontSize = settings.editorFontSize.sp, lineHeight = (settings.editorFontSize * 1.5f).sp),
-                cursorBrush = SolidColor(sh.accent),
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-                decorationBox = { inner ->
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        if (content.text.isEmpty()) Text("Start writing...", color = sh.text2.copy(alpha = 0.6f), fontSize = settings.editorFontSize.sp)
-                        inner()
-                        Spacer(Modifier.height(120.dp))
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                BasicTextField(
+                    value = content, onValueChange = { content = it },
+                    textStyle = TextStyle(color = sh.text1, fontSize = settings.editorFontSize.sp, lineHeight = (settings.editorFontSize * 1.5f).sp),
+                    cursorBrush = SolidColor(sh.accent),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    decorationBox = { inner ->
+                        Column(Modifier.fillMaxSize()) {
+                            if (content.text.isEmpty()) Text("Start writing...", color = sh.text2.copy(alpha = 0.6f), fontSize = settings.editorFontSize.sp)
+                            inner()
+                            AttachmentStrip(attachStore, attachments, noteId) { attachments = attachStore.forNote(noteId) }
+                            Spacer(Modifier.height(120.dp))
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Thumbnails + files row rendered inside a note; taps open the media. */
+@Composable
+private fun ColumnScope.AttachmentStrip(
+    store: AttachmentStore,
+    attachments: List<Attachment>,
+    noteId: Long,
+    onChanged: () -> Unit,
+) {
+    if (attachments.isEmpty()) return
+    val sh = LocalShark.current
+    val context = LocalContext.current
+    Spacer(Modifier.height(12.dp))
+    Row(
+        Modifier.padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Attachments", color = sh.text2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.weight(1f))
+    }
+    Spacer(Modifier.height(6.dp))
+    attachments.chunked(4).forEach { row ->
+        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { a ->
+                Box(
+                    Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(sh.surface2)
+                        .clickable { openAttachment(context, store, a) },
+                ) {
+                    if (a.mime.startsWith("image/")) {
+                        val bmp = remember(a.id, attachments) {
+                            runCatching {
+                                android.graphics.BitmapFactory.decodeFile(store.fileFor(a).path)
+                                    ?.asImageBitmap()
+                            }.getOrNull()
+                        }
+                        if (bmp != null) {
+                            Image(bitmap = bmp, contentDescription = a.filename,
+                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Filled.PlayArrow, null, tint = sh.accent, modifier = Modifier.size(22.dp))
+                            Text(a.filename.substringAfterLast('.').take(4), color = sh.text2, fontSize = 9.sp, maxLines = 1)
+                        }
                     }
-                },
-            )
+                    Icon(
+                        Icons.Filled.Close, "remove", tint = Color.White,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(16.dp)
+                            .clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                            .clickable { store.remove(context, a.id); onChanged() },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+private fun openAttachment(context: android.content.Context, store: AttachmentStore, a: Attachment) {
+    val uri = store.shareUri(context, a)
+    val view = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, if (a.mime.isBlank()) "*/*" else a.mime)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching { context.startActivity(view) }.onFailure {
+        // No handler for direct open; fall back to the system share sheet.
+        runCatching {
+            context.startActivity(android.content.Intent.createChooser(
+                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = if (a.mime.isBlank()) "*/*" else a.mime
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }, null))
         }
     }
 }

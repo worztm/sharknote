@@ -71,6 +71,44 @@ val CrosshairIcon: ImageVector by lazy {
     }.build()
 }
 
+val ClockIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Clock", defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        addPath(
+            pathData = addPathNodes("M12,2a10,10 0 1,0 0,20a10,10 0 1,0 0,-20Z"),
+            stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+            strokeLineWidth = 1.8f,
+        )
+        addPath(
+            pathData = addPathNodes("M12,6.5 L12,12 L16,14"),
+            stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+            strokeLineWidth = 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        )
+    }.build()
+}
+
+val PaperclipIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Paperclip", defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        addPath(
+            pathData = addPathNodes(
+                "M16.5,6 L8.9,13.6a2.5,2.5 0 0,0 3.5,3.5 l7.1,-7.1a4.5,4.5 0 0,0 -6.4,-6.4 L5.7,10.7" +
+                    "a6.5,6.5 0 0,0 9.2,9.2 l6.1,-6.1"
+            ),
+            stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+            strokeLineWidth = 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        )
+    }.build()
+}
+
 val EyeIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "Eye", defaultWidth = 24.dp, defaultHeight = 24.dp,
