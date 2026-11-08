@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,9 +53,14 @@ const (
 
 	updateProgressEvent = "sharknote:update-progress"
 
-	downloadHTTPTimeout = 30 * time.Second
-	downloadMaxBytes    = 512 << 20 // sanity ceiling: 512 MB
+	manifestHTTPTimeout = 30 * time.Second // whole manifest exchange
+	downloadMaxBytes    = 512 << 20        // sanity ceiling: 512 MB
 )
+
+// updateBaseDevOverride is true when SHARKNOTE_UPDATE_BASE was set by the
+// developer. It is the only way an arbitrary base (possibly non-https, e.g.
+// a local preview server) is accepted.
+var updateBaseDevOverride = os.Getenv("SHARKNOTE_UPDATE_BASE") != ""
 
 // updateProgress is emitted to the frontend while the installer downloads.
 type updateProgress struct {
@@ -117,16 +122,22 @@ type UpdateInfo struct {
 }
 
 // UpdaterService exposes remote update checks to the frontend bindings.
+// The manifest client carries a short whole-exchange timeout; the download
+// client deliberately has none — a Client.Timeout covers the entire body
+// read, which would cut large installers off mid-stream. Long transfers are
+// instead bounded by the per-download context and downloadMaxBytes.
 type UpdaterService struct {
 	mu             sync.Mutex
-	client         *http.Client
+	manifestClient *http.Client
+	downloadClient *http.Client
 	downloadedPath string
 	downloadedSHA  string
 }
 
 func NewUpdaterService() *UpdaterService {
 	return &UpdaterService{
-		client: &http.Client{Timeout: downloadHTTPTimeout},
+		manifestClient: &http.Client{Timeout: manifestHTTPTimeout},
+		downloadClient: &http.Client{},
 	}
 }
 
@@ -208,7 +219,7 @@ func writePendingUpdate(p pendingUpdate) {
 // running version. A network failure is returned as an error so the UI can
 // stay silent instead of nagging.
 func (u *UpdaterService) CheckForUpdate() (*UpdateInfo, error) {
-	mf, err := fetchManifest(context.Background(), u.client)
+	mf, err := fetchManifest(context.Background(), u.manifestClient)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +246,7 @@ func (u *UpdaterService) CheckForUpdate() (*UpdateInfo, error) {
 // sharknote:update-progress events along the way, and verifies its SHA-256
 // against the manifest before declaring it ready.
 func (u *UpdaterService) DownloadUpdate() error {
-	mf, err := fetchManifest(context.Background(), u.client)
+	mf, err := fetchManifest(context.Background(), u.manifestClient)
 	if err != nil {
 		return err
 	}
@@ -268,6 +279,11 @@ func (u *UpdaterService) DownloadUpdate() error {
 	if !strings.Contains(url, "://") {
 		url = updateBaseURL() + url
 	}
+	// The URL is covered by the signature, but belt-and-braces: never leave
+	// https without an explicit developer override.
+	if err := validateDownloadURL(url); err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -276,7 +292,7 @@ func (u *UpdaterService) DownloadUpdate() error {
 		return err
 	}
 	req.Header.Set("Cache-Control", "no-cache")
-	resp, err := u.client.Do(req)
+	resp, err := u.downloadClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -286,12 +302,19 @@ func (u *UpdaterService) DownloadUpdate() error {
 	}
 
 	total := resp.ContentLength
-	tmp := filepath.Join(os.TempDir(), "sharknote-update-setup.exe")
-	out, err := os.Create(tmp)
+	// Random temp name: two instances can't clobber each other and a
+	// pre-planted file at a known path can't be mistaken for it.
+	tmpFile, err := os.CreateTemp("", "sharknote-update-*.exe")
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	tmp := tmpFile.Name()
+	out := tmpFile
+	// Closes the handle and deletes the partial file on every failure path.
+	cleanup := func() {
+		out.Close()
+		os.Remove(tmp)
+	}
 
 	hasher := sha256.New()
 	var downloaded int64
@@ -302,16 +325,15 @@ func (u *UpdaterService) DownloadUpdate() error {
 		if n > 0 {
 			downloaded += int64(n)
 			if downloaded > downloadMaxBytes {
-				out.Close()
-				os.Remove(tmp)
+				cleanup()
 				return errors.New("download exceeds the expected size")
 			}
 			if _, werr := out.Write(buf[:n]); werr != nil {
-				os.Remove(tmp)
+				cleanup()
 				return werr
 			}
 			if _, werr := hasher.Write(buf[:n]); werr != nil {
-				os.Remove(tmp)
+				cleanup()
 				return werr
 			}
 			// Throttle progress events to a handful per second.
@@ -329,7 +351,7 @@ func (u *UpdaterService) DownloadUpdate() error {
 			break
 		}
 		if readErr != nil {
-			os.Remove(tmp)
+			cleanup()
 			return readErr
 		}
 	}
@@ -337,7 +359,7 @@ func (u *UpdaterService) DownloadUpdate() error {
 
 	got := hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(got, want) {
-		os.Remove(tmp)
+		cleanup()
 		emitUpdateProgress(updateProgress{Stage: "error"})
 		return fmt.Errorf("checksum mismatch: downloaded file does not match the published SHA-256")
 	}
@@ -393,13 +415,46 @@ func (u *UpdaterService) ApplyUpdate() error {
 		return errors.New("the downloaded update is missing; download it again")
 	}
 
+	// Nothing on disk is trusted here — not the downloaded state, not the
+	// marker file, not the installer file itself. Re-fetch the signed
+	// manifest and re-hash the installer immediately before executing it:
+	// this closes both the verified-then-waited race and marker tampering
+	// (the marker lives in a user-writable directory).
+	mf, err := fetchManifest(context.Background(), u.manifestClient)
+	if err != nil {
+		return fmt.Errorf("update aborted (could not re-check the published release): %w", err)
+	}
+	if !isNewerVersion(mf.Version, AppVersion) {
+		return errors.New("update aborted: the published version is not newer than this build")
+	}
+	gotNow, err := sha256File(path)
+	if err != nil {
+		return fmt.Errorf("update aborted (cannot read the downloaded installer): %w", err)
+	}
+	if !strings.EqualFold(gotNow, mf.SHA256) {
+		// Stale or tampered installer — drop everything and ask for a re-download.
+		if marker := pendingUpdateMarker(); marker != "" {
+			os.Remove(marker)
+		}
+		u.mu.Lock()
+		u.downloadedPath = ""
+		u.downloadedSHA = ""
+		u.mu.Unlock()
+		return errors.New("the downloaded update does not match the published release; download it again")
+	}
+
 	// Write a tiny .cmd script instead of fighting shell quoting rules.
 	// The installer itself relaunches the app after a silent install
 	// (see the ${Silent} block in project.nsi) — the installer is spawned
 	// here and is guaranteed to outlive this quitting process, which makes
 	// the whole handoff deterministic. Every step is logged so failures
 	// leave a trace in %APPDATA%\sharknote\update.log.
-	scriptPath := filepath.Join(os.TempDir(), strconv.Itoa(int(time.Now().UnixNano()))+"-sharknote-update.cmd")
+	scriptFile, err := os.CreateTemp("", "*-sharknote-update.cmd")
+	if err != nil {
+		return err
+	}
+	scriptPath := scriptFile.Name()
+	scriptFile.Close()
 	logPath := updateLogPath()
 	var b strings.Builder
 	b.WriteString("@echo off\r\n")
@@ -416,10 +471,15 @@ func (u *UpdaterService) ApplyUpdate() error {
 	}
 	b.WriteString("del /q \"%~f0\" >nul 2>&1\r\n")
 	if err := os.WriteFile(scriptPath, []byte(b.String()), 0o600); err != nil {
+		os.Remove(scriptPath)
 		return err
 	}
 
-	if err := launchDetached("cmd", "/c", scriptPath); err != nil {
+	comspec := os.Getenv("ComSpec")
+	if comspec == "" {
+		comspec = "cmd"
+	}
+	if err := launchDetached(comspec, "/c", scriptPath); err != nil {
 		os.Remove(scriptPath)
 		return err
 	}
@@ -431,6 +491,35 @@ func (u *UpdaterService) ApplyUpdate() error {
 }
 
 // --- internals -------------------------------------------------------------
+
+// sha256File hashes an existing file in one pass (installer-sized, up to
+// downloadMaxBytes).
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// validateDownloadURL refuses plain-http update downloads unless the
+// developer overrode the base URL (SHARKNOTE_UPDATE_BASE) for local/staging
+// testing. The manifest URL itself is always the baked-in https base.
+func validateDownloadURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid update URL: %w", err)
+	}
+	if u.Scheme != "https" && !updateBaseDevOverride {
+		return errors.New("refusing to download the update over plain http")
+	}
+	return nil
+}
 
 func fetchManifest(ctx context.Context, client *http.Client) (*updateManifest, error) {
 	url := updateBaseURL() + "/latest.json"

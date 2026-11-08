@@ -3,6 +3,10 @@
 
 /**
  * UpdaterService exposes remote update checks to the frontend bindings.
+ * The manifest client carries a short whole-exchange timeout; the download
+ * client deliberately has none — a Client.Timeout covers the entire body
+ * read, which would cut large installers off mid-stream. Long transfers are
+ * instead bounded by the per-download context and downloadMaxBytes.
  * @module
  */
 
