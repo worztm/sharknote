@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -75,6 +76,13 @@ func main() {
 		log.Printf("failed to register .md file association: %v", err)
 	}
 
+	// Transparent window on Windows (composited over the desktop); every
+	// other platform keeps the solid window for now.
+	backgroundType := application.BackgroundTypeSolid
+	if runtime.GOOS == "windows" {
+		backgroundType = application.BackgroundTypeTransparent
+	}
+
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Sharknote",
 		Width:     1150,
@@ -88,8 +96,10 @@ func main() {
 		// Transparent window: the webview is composited over the desktop, so
 		// in Liquid Glass mode the app is literally clear water — you see
 		// your wallpaper through it. The dark and light themes paint their
-		// own background, so they look exactly as before.
-		BackgroundType:  application.BackgroundTypeTransparent,
+		// own background, so they look exactly as before. Windows only for
+		// now: other platforms keep the solid window until their
+		// transparency path is verified.
+		BackgroundType:  backgroundType,
 		BackgroundColour: application.NewRGB(9, 9, 11),
 		URL:              "/",
 		// Files dragged from Explorer become attachments (images/video also

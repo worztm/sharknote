@@ -91,12 +91,12 @@
 }
 
 /* ---------- 1. the reading scrim ---------- */
-/* A neutral sheet under the content so notes stay readable no matter how
-   bright the wallpaper behind the window is. No colour, just depth.
-   The desktop behind the window lives outside the webview, so it cannot be
-   blurred — the sheets have to carry the legibility themselves. */
+/* The notes must never dissolve into the desktop. The reading surface is
+   therefore almost solid: the desktop shows through the chrome and the
+   margins, never through the text itself. The desktop lives outside the
+   webview, so it cannot be blurred — opacity is the only tool we have. */
 html.glass main {
-  background-color: oklch(0.11 0.012 275 / 0.9);
+  background-color: oklch(0.11 0.012 275 / 0.97);
 }
 
 /* ---------- 2. frosted panels ---------- */
@@ -120,11 +120,11 @@ html.glass [data-slot="popover-content"] {
    readable over a bright desktop behind the window. */
 html.glass aside {
   position: relative;
-  background-color: oklch(0.15 0.02 275 / 0.82);
+  background-color: oklch(0.15 0.02 275 / 0.94);
 }
 
 html.glass [data-tabs-bar] {
-  background-color: oklch(0.14 0.02 275 / 0.72);
+  background-color: oklch(0.14 0.02 275 / 0.9);
 }
 
 html.glass [data-slot="dialog-content"],
@@ -132,7 +132,7 @@ html.glass [data-slot="alert-dialog-content"],
 html.glass [data-slot="command"],
 html.glass [data-slot="dropdown-menu-content"],
 html.glass [data-slot="popover-content"] {
-  background-color: oklch(0.16 0.02 275 / 0.9);
+  background-color: oklch(0.16 0.02 275 / 0.96);
 }
 
 /* Specular edge along the top of the frosted panels. */
@@ -255,7 +255,7 @@ html.glass input[type="range"] {
 /* The graph canvas keeps a darker frosted backing: nodes and edges need
    the contrast they had against the flat dark background. */
 html.glass [data-graph-canvas] {
-  background-color: oklch(0.1 0.02 275 / 0.5);
+  background-color: oklch(0.1 0.02 275 / 0.94);
   backdrop-filter: blur(18px) saturate(130%);
   -webkit-backdrop-filter: blur(18px) saturate(130%);
 }
