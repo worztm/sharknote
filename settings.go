@@ -143,3 +143,41 @@ func (s *Store) SetVaultPath(path string) error {
 	_, err = s.UpdateSettings(sets)
 	return err
 }
+
+// GetLastNoteID reads the id of the note that was active the last time the
+// app closed, stored under its own row (key "lastNote") so the settings
+// bundle the frontend round-trips can never clobber or erase it. Returns 0
+// when nothing was recorded (first run, or every tab had been closed) or the
+// value can't be parsed.
+func (s *Store) GetLastNoteID() (int64, error) {
+	var raw string
+	err := s.db.QueryRow(
+		"SELECT value FROM settings WHERE key = 'lastNote'").Scan(&raw)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	var id int64
+	if err := json.Unmarshal([]byte(raw), &id); err != nil || id < 0 {
+		// Corrupt value — treat it as never recorded instead of failing.
+		return 0, nil
+	}
+	return id, nil
+}
+
+// SetLastNoteID records which note was last active so the next launch can
+// reopen it. A non-positive id clears the record, which is how the frontend
+// says "every tab was closed — show the default startup view next time".
+func (s *Store) SetLastNoteID(id int64) error {
+	data, err := json.Marshal(id)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		"INSERT INTO settings (key, value) VALUES ('lastNote', ?) "+
+			"ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+		string(data))
+	return err
+}

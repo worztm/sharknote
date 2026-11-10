@@ -66,13 +66,35 @@ export default function App() {
 
   // Remember the most recent note tab: the graph's Back button returns there,
   // its canvas highlights that node as active, and clicking graph nodes
-  // reuses this tab instead of spawning new ones.
+  // reuses this tab instead of spawning new ones. The last active note is
+  // also persisted so the app reopens it after a restart; when no note tab
+  // exists anymore (all tabs closed) the record is cleared so the next
+  // launch shows the default startup view instead.
+  const lastSavedNoteIdRef = useRef<number | null>(-1);
+  // Persistence starts only after the initial load finished; otherwise the
+  // first tracker run (still-empty tab state at mount) would wipe the saved
+  // value before the startup effect gets a chance to read it.
+  const restoredRef = useRef(false);
   useEffect(() => {
+    if (!restoredRef.current) return;
     const t = tabs.find((x) => x.key === activeKey);
+    const hasNoteTab = tabs.some((x) => x.kind === "note" && x.noteId != null);
+    const id =
+      t?.kind === "note" && t.noteId != null
+        ? t.noteId
+        : hasNoteTab
+          ? null // A note is still open in a background tab — remember it.
+          : 0; // No note tab left — default startup view on next launch.
     if (t?.kind === "note" && t.noteId != null) {
       lastNoteKeyRef.current = t.key;
       setLastNoteId(t.noteId);
     }
+    if (id == null) return;
+    if (lastSavedNoteIdRef.current === id) return;
+    lastSavedNoteIdRef.current = id;
+    NoteService.SaveLastOpenNote(id).catch((err) =>
+      console.error("SaveLastOpenNote failed", err)
+    );
   }, [activeKey, tabs]);
 
   const refreshNotes = useCallback(async () => {
@@ -86,7 +108,8 @@ export default function App() {
     }
   }, []);
 
-  // Initial load: fetch settings + notes, open the most recently edited note.
+  // Initial load: fetch settings + notes, restore the note that was open at
+  // the last close (nothing recorded → default startup view).
   useEffect(() => {
     (async () => {
       try {
@@ -110,7 +133,17 @@ export default function App() {
       } catch (err) {
         console.error("TakePendingOpenedNote failed", err);
       }
-      if (firstId == null && !wantGraph && list.length > 0) firstId = list[0].id;
+      if (firstId == null && !wantGraph && list.length > 0) {
+        // Reopen the note that was active at the last close. 0 (nothing
+        // recorded — first run or every tab was closed) and an id whose
+        // note no longer exists both fall through to the default view.
+        try {
+          const last = await NoteService.LoadLastOpenNote();
+          if (last > 0 && list.some((n) => n.id === last)) firstId = last;
+        } catch (err) {
+          console.error("LoadLastOpenNote failed", err);
+        }
+      }
       if (wantGraph) {
         const key = nextTabKey();
         setTabs([{ key, kind: "graph", title: "Graph" }]);
@@ -120,6 +153,9 @@ export default function App() {
         setTabs([{ key, kind: "note", noteId: firstId, title: tabTitle(list, firstId) }]);
         setActiveKey(key);
       }
+      // From here on tab changes (including this restore) are real user
+      // state and may be persisted.
+      restoredRef.current = true;
       setLoaded(true);
     })();
   }, [refreshNotes]);

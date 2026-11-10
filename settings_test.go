@@ -191,3 +191,47 @@ func TestVaultPathPersisted(t *testing.T) {
 		t.Fatalf("vault path not persisted: %q", got.VaultPath)
 	}
 }
+
+// The last-open note lives in its own row, separate from the 'app' settings
+// bundle: saving user preferences must never wipe the restore state, the
+// value round-trips, and 0 (or a corrupt value) reads as "nothing recorded".
+func TestLastNoteIDPersistedSeparatelyFromSettings(t *testing.T) {
+	s := testStore(t)
+
+	if id, err := s.GetLastNoteID(); err != nil || id != 0 {
+		t.Fatalf("fresh store: got (%d, %v), want (0, nil)", id, err)
+	}
+
+	if err := s.SetLastNoteID(42); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.GetLastNoteID(); err != nil || id != 42 {
+		t.Fatalf("after set: got (%d, %v), want (42, nil)", id, err)
+	}
+
+	// Saving settings round-trips the whole bundle — lastNote must survive.
+	if _, err := s.UpdateSettings(DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.GetLastNoteID(); err != nil || id != 42 {
+		t.Fatalf("settings save clobbered lastNote: got (%d, %v), want (42, nil)", id, err)
+	}
+
+	// Zero clears the record: the next launch shows the default view.
+	if err := s.SetLastNoteID(0); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.GetLastNoteID(); err != nil || id != 0 {
+		t.Fatalf("after clear: got (%d, %v), want (0, nil)", id, err)
+	}
+
+	// A corrupt value degrades to "nothing recorded", not to a failure.
+	if _, err := s.db.Exec(
+		"INSERT INTO settings (key, value) VALUES ('lastNote', ?) "+
+			"ON CONFLICT(key) DO UPDATE SET value = excluded.value", "{oops"); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.GetLastNoteID(); err != nil || id != 0 {
+		t.Fatalf("corrupt value: got (%d, %v), want (0, nil)", id, err)
+	}
+}

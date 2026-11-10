@@ -258,6 +258,25 @@ func (s *NoteService) TakePendingOpenedNote() int64 {
 	return id
 }
 
+// SaveLastOpenNote remembers which note was active so the next launch can
+// reopen it. The frontend calls it whenever the active note tab changes, and
+// with 0 as soon as no note tab exists anymore (all tabs closed), which
+// makes the next launch show the default startup view.
+func (s *NoteService) SaveLastOpenNote(id int64) {
+	_ = s.store.SetLastNoteID(id)
+}
+
+// LoadLastOpenNote returns the id of the note that was open the last time
+// the app closed, or 0 when nothing was recorded (never opened a note since
+// the last reset, or every tab had been closed).
+func (s *NoteService) LoadLastOpenNote() int64 {
+	id, err := s.store.GetLastNoteID()
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
 // GetOutgoingLinks lists the wiki links written inside a note.
 func (s *NoteService) GetOutgoingLinks(id int64) ([]LinkInfo, error) {
 	return s.store.GetOutgoingLinks(id)

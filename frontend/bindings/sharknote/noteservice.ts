@@ -99,6 +99,15 @@ export function ListNotes(): $CancellablePromise<$models.NoteSummary[] | null> {
 }
 
 /**
+ * LoadLastOpenNote returns the id of the note that was open the last time
+ * the app closed, or 0 when nothing was recorded (never opened a note since
+ * the last reset, or every tab had been closed).
+ */
+export function LoadLastOpenNote(): $CancellablePromise<number> {
+    return $Call.ByID(3720948805);
+}
+
+/**
  * OpenFiles shows a native multi-select dialog for markdown files, imports
  * the picked files, and returns the ids of the notes that were created or
  * updated. Returns nil when the user cancels.
@@ -122,6 +131,16 @@ export function OpenFolderDialog(): $CancellablePromise<number[] | null> {
  */
 export function RenameNote(id: number, title: string): $CancellablePromise<$models.Note | null> {
     return $Call.ByID(2999546831, id, title);
+}
+
+/**
+ * SaveLastOpenNote remembers which note was active so the next launch can
+ * reopen it. The frontend calls it whenever the active note tab changes, and
+ * with 0 as soon as no note tab exists anymore (all tabs closed), which
+ * makes the next launch show the default startup view.
+ */
+export function SaveLastOpenNote(id: number): $CancellablePromise<void> {
+    return $Call.ByID(3363444608, id);
 }
 
 /**
