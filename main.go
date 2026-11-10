@@ -85,6 +85,11 @@ func main() {
 		// resizes/maximizes/minimizes it however they like afterwards.
 		InitialPosition:  application.WindowCentered,
 		StartState:       application.WindowStateNormal,
+		// Transparent window: the webview is composited over the desktop, so
+		// in Liquid Glass mode the app is literally clear water — you see
+		// your wallpaper through it. The dark and light themes paint their
+		// own background, so they look exactly as before.
+		BackgroundType:  application.BackgroundTypeTransparent,
 		BackgroundColour: application.NewRGB(9, 9, 11),
 		URL:              "/",
 		// Files dragged from Explorer become attachments (images/video also

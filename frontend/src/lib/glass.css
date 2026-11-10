@@ -1,28 +1,32 @@
 /* =====================================================================
    Liquid Glass
    ---------------------------------------------------------------------
-   A four-layer material, built the way iOS builds it:
-     1. a living aurora behind the window,
-     2. frosted panels that blur and saturate it,
-     3. a refractive 1px edge with a specular highlight along the top,
-     4. a sheen that sweeps across controls as the pointer passes.
+   Clear water, not a coloured wash. The window itself is transparent
+   (Wails composites the webview over the desktop), so what shows through
+   the glass is your wallpaper — nothing is painted behind it. On top of
+   that:
+     1. frosted panels that blur and saturate what is behind them,
+     2. a refractive 1px edge with a specular highlight along the top,
+     3. a sheen that sweeps across controls as the pointer passes,
+     4. a neutral scrim under the reading area so text stays legible
+        over a bright wallpaper.
 
    This file is injected at runtime (see glass.ts) instead of being bundled
-   into the app stylesheet: the CSS optimizer rewrites `backdrop-filter` to
-   its -webkit- form, which this WebView2 does not honour, so the frost
+   into the app stylesheet: the CSS optimizer rewrites `backdrop-filter`
+   to its -webkit- form, which this WebView2 does not honour, so the frost
    would silently disappear. Raw CSS keeps the standard property intact.
    ===================================================================== */
 
 .glass {
   --scheme: dark;
 
-  /* The canvas is see-through: the aurora supplies the color. */
-  --background: oklch(0.12 0.02 275 / 0.26);
+  /* Nothing is painted: the desktop shows through. */
+  --background: transparent;
   --foreground: oklch(0.97 0.004 275);
 
-  --card: oklch(1 0 0 / 0.09);
+  --card: oklch(1 0 0 / 0.08);
   --card-foreground: oklch(0.97 0.004 275);
-  --popover: oklch(0.2 0.022 275 / 0.6);
+  --popover: oklch(0.2 0.022 275 / 0.55);
   --popover-foreground: oklch(0.97 0.004 275);
 
   --primary: oklch(0.74 0.15 var(--hue));
@@ -30,7 +34,7 @@
   --secondary: oklch(1 0 0 / 0.08);
   --secondary-foreground: oklch(0.95 0.004 275);
   --muted: oklch(1 0 0 / 0.055);
-  --muted-foreground: oklch(0.79 0.012 275);
+  --muted-foreground: oklch(0.82 0.012 275);
   --accent: oklch(1 0 0 / 0.13);
   --accent-foreground: oklch(0.98 0.005 275);
   --destructive: oklch(0.66 0.2 25);
@@ -43,7 +47,7 @@
   --chart-4: oklch(0.82 0.11 50);
   --chart-5: oklch(0.72 0.15 0);
 
-  --sidebar: oklch(0.16 0.022 275 / 0.3);
+  --sidebar: oklch(0.16 0.022 275 / 0.22);
   --sidebar-foreground: oklch(0.97 0.004 275);
   --sidebar-primary: oklch(0.74 0.15 var(--hue));
   --sidebar-primary-foreground: oklch(0.18 0.05 var(--hue));
@@ -71,7 +75,7 @@
 
   --md-text: oklch(0.93 0.005 275);
   --md-heading: oklch(0.99 0.002 275);
-  --md-muted: oklch(0.84 0.012 275);
+  --md-muted: oklch(0.86 0.012 275);
   --md-border: oklch(1 0 0 / 0.12);
   --md-hr: oklch(1 0 0 / 0.14);
   --md-code-bg: oklch(1 0 0 / 0.07);
@@ -86,34 +90,13 @@
   --md-placeholder: oklch(0.62 0.014 275);
 }
 
-/* ---------- 1. the living backdrop ---------- */
-html.glass body::before {
-  content: "";
-  position: fixed;
-  inset: -30%;
-  z-index: -2;
-  pointer-events: none;
-  background:
-    radial-gradient(42% 36% at 16% 22%, oklch(0.68 0.21 298 / 0.78), transparent 64%),
-    radial-gradient(38% 32% at 86% 12%, oklch(0.74 0.16 224 / 0.7), transparent 62%),
-    radial-gradient(44% 38% at 78% 86%, oklch(0.66 0.21 340 / 0.62), transparent 64%),
-    radial-gradient(36% 32% at 22% 88%, oklch(0.7 0.14 166 / 0.5), transparent 62%),
-    radial-gradient(30% 26% at 52% 46%, oklch(0.72 0.18 272 / 0.42), transparent 66%),
-    linear-gradient(158deg, oklch(0.19 0.04 286), oklch(0.13 0.033 250) 55%, oklch(0.17 0.042 312));
-  filter: blur(26px) saturate(140%);
-  animation: glass-drift 48s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
-  will-change: transform;
-}
-
-/* Film grain keeps the large blurred areas from banding. */
-html.glass body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.04;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+/* ---------- 1. the reading scrim ---------- */
+/* A neutral sheet under the content so notes stay readable no matter how
+   bright the wallpaper behind the window is. No colour, just depth.
+   The desktop behind the window lives outside the webview, so it cannot be
+   blurred — the sheets have to carry the legibility themselves. */
+html.glass main {
+  background-color: oklch(0.11 0.012 275 / 0.9);
 }
 
 /* ---------- 2. frosted panels ---------- */
@@ -133,10 +116,23 @@ html.glass [data-slot="popover-content"] {
     0 20px 44px -26px oklch(0 0 0 / 0.75);
 }
 
-/* Only static panels need a positioning context for their specular edge —
-   dialogs are already fixed and must stay that way. */
+/* Each panel carries its own sheet of glass so the text on it stays
+   readable over a bright desktop behind the window. */
 html.glass aside {
   position: relative;
+  background-color: oklch(0.15 0.02 275 / 0.82);
+}
+
+html.glass [data-tabs-bar] {
+  background-color: oklch(0.14 0.02 275 / 0.72);
+}
+
+html.glass [data-slot="dialog-content"],
+html.glass [data-slot="alert-dialog-content"],
+html.glass [data-slot="command"],
+html.glass [data-slot="dropdown-menu-content"],
+html.glass [data-slot="popover-content"] {
+  background-color: oklch(0.16 0.02 275 / 0.9);
 }
 
 /* Specular edge along the top of the frosted panels. */
@@ -155,22 +151,6 @@ html.glass [data-slot="alert-dialog-overlay"] {
   background-color: oklch(0.1 0.02 275 / 0.42);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
-}
-
-/* The graph canvas keeps a darker frosted backing: nodes and edges need
-   the contrast they had against the flat dark background. */
-html.glass [data-graph-canvas] {
-  background-color: oklch(0.1 0.02 275 / 0.5);
-  backdrop-filter: blur(18px) saturate(130%);
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
-}
-
-/* Native search fields carry their own chrome — pull it back into the
-   material so it doesn't read as a grey box. */
-html.glass input[type="search"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background-color: oklch(1 0 0 / 0.07);
 }
 
 /* ---------- 3. glass controls ---------- */
@@ -272,22 +252,23 @@ html.glass input[type="range"] {
   accent-color: oklch(0.74 0.15 var(--hue));
 }
 
-@keyframes glass-drift {
-  0% {
-    transform: translate3d(-2%, -1%, 0) scale(1.04);
-  }
-  50% {
-    transform: translate3d(2%, 1.5%, 0) scale(1.09);
-  }
-  100% {
-    transform: translate3d(-1%, 2%, 0) scale(1.05);
-  }
+/* The graph canvas keeps a darker frosted backing: nodes and edges need
+   the contrast they had against the flat dark background. */
+html.glass [data-graph-canvas] {
+  background-color: oklch(0.1 0.02 275 / 0.5);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+
+/* Native search fields carry their own chrome — pull it back into the
+   material so it doesn't read as a grey box. */
+html.glass input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: oklch(1 0 0 / 0.07);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.glass body::before {
-    animation: none;
-  }
   html.glass button::after {
     display: none;
   }

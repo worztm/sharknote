@@ -279,7 +279,7 @@ export function SettingsDialog({
           </Row>
           <Row
             label="Liquid Glass"
-            hint="iOS-style translucent chrome: frosted panels, refractive edges and a living backdrop."
+            hint="iOS-style translucent chrome: frosted panels, refractive edges, your desktop showing through."
           >
             <GlassSwitch
               active={settings.theme === "glass"}
