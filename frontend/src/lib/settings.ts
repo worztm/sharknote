@@ -1,4 +1,5 @@
 import { Window } from "@wailsio/runtime";
+import { setGlassEnabled } from "./glass";
 
 /**
  * Frontend mirror of the backend Settings model, plus the logic that turns a
@@ -6,7 +7,11 @@ import { Window } from "@wailsio/runtime";
  */
 
 export interface AppSettings {
-  theme: "dark" | "light";
+  /**
+   * "dark" | "light" are the flat color schemes; "glass" is the Liquid Glass
+   * material — translucent, refractive chrome floating over a living backdrop.
+   */
+  theme: "dark" | "light" | "glass";
   accent: "violet" | "sky" | "emerald" | "amber" | "rose";
   graphTheme: "crimson" | "violet" | "ocean" | "forest" | "amber";
   editorFont: "serif" | "sans" | "mono";
@@ -36,7 +41,6 @@ export const THEME_OPTIONS: { value: AppSettings["theme"]; label: string }[] = [
   { value: "dark", label: "Dark" },
   { value: "light", label: "Light" },
 ];
-
 export const ACCENT_OPTIONS: {
   value: AppSettings["accent"];
   label: string;
@@ -74,7 +78,10 @@ export const EDITOR_FONT_OPTIONS: {
 export function normalizeSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
   const d = DEFAULT_SETTINGS;
   return {
-    theme: raw?.theme === "light" || raw?.theme === "dark" ? raw.theme : d.theme,
+    theme:
+      raw?.theme === "light" || raw?.theme === "dark" || raw?.theme === "glass"
+        ? raw.theme
+        : d.theme,
     accent: ACCENT_OPTIONS.some((a) => a.value === raw?.accent)
       ? (raw!.accent as AppSettings["accent"])
       : d.accent,
@@ -112,6 +119,8 @@ export function normalizeSettings(raw: Partial<AppSettings> | null | undefined):
 const WINDOW_BG: Record<AppSettings["theme"], [number, number, number]> = {
   dark: [9, 9, 11],
   light: [248, 248, 251],
+  // Deep blue-black so the native title bar blends into the aurora backdrop.
+  glass: [13, 14, 24],
 };
 
 /**
@@ -121,8 +130,13 @@ const WINDOW_BG: Record<AppSettings["theme"], [number, number, number]> = {
  */
 export function applySettings(s: AppSettings) {
   const root = document.documentElement;
-  root.classList.toggle("dark", s.theme === "dark");
-  root.style.colorScheme = s.theme;
+  // Liquid Glass is a dark material with its own light-emitting surfaces, so
+  // the dark token set stays active and .glass layers the material on top.
+  const glass = s.theme === "glass";
+  root.classList.toggle("dark", glass || s.theme === "dark");
+  root.classList.toggle("glass", glass);
+  setGlassEnabled(glass);
+  root.style.colorScheme = glass ? "dark" : s.theme;
   root.dataset.accent = s.accent;
   root.dataset.editorFont = s.editorFont;
   root.style.setProperty("--editor-font-size", `${s.editorFontSize}px`);

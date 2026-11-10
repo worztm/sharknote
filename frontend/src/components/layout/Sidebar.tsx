@@ -221,6 +221,7 @@ export function Sidebar({
                   return (
                     <div key={n.id} className="group relative">
                       <button
+                        data-note-row
                         onClick={(e) =>
                           onOpenNote(n.id, e.ctrlKey || e.metaKey)
                         }

@@ -760,7 +760,7 @@ export function GraphView({
   const edgeCount = data?.edges?.length ?? 0;
 
   return (
-    <div ref={containerRef} className="relative h-full min-w-0 flex-1 overflow-hidden bg-background">
+    <div ref={containerRef} data-graph-canvas className="relative h-full min-w-0 flex-1 overflow-hidden bg-background">
       <canvas
         ref={canvasRef}
         className="graph-canvas absolute inset-0 h-full w-full"

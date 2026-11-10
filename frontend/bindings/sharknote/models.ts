@@ -107,7 +107,9 @@ export interface SaveNoteResult {
  */
 export interface Settings {
     /**
-     * Theme controls the overall color scheme: "dark" or "light".
+     * Theme controls the overall color scheme: "dark", "light" or "glass".
+     * "glass" is the Liquid Glass material: translucent, refractive chrome
+     * floating over a living backdrop.
      */
     "theme": string;
 

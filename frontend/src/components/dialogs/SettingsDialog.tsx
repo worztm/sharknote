@@ -153,6 +153,81 @@ function Toggle({
   );
 }
 
+/**
+ * The Liquid Glass switch. A capsule track with a refractive knob that
+ * slides, plus a mini glass preview that lights up when the material is on —
+ * so the effect can be judged before the whole app turns into it.
+ */
+function GlassSwitch({
+  active,
+  onChange,
+}: {
+  active: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={active}
+      aria-label="Liquid Glass interface"
+      data-glass-switch
+      onClick={() => onChange(!active)}
+      className={cn(
+        "group relative flex h-9 w-44 shrink-0 items-center gap-2.5 overflow-hidden rounded-full border px-1.5",
+        "transition-all duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
+        active
+          ? "border-white/25 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_10px_26px_-14px_rgba(0,0,0,0.7)]"
+          : "border-border bg-secondary/50 hover:bg-secondary"
+      )}
+    >
+      {/* Miniature of the material: a blurred colour field under a lens. */}
+      <span
+        className={cn(
+          "relative size-6 shrink-0 overflow-hidden rounded-full transition-all duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
+          active
+            ? "border border-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_4px_12px_-6px_rgba(0,0,0,0.8)]"
+            : "border border-border"
+        )}
+      >
+        <span
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{
+            opacity: active ? 1 : 0,
+            background:
+              "radial-gradient(70% 70% at 30% 25%, oklch(0.72 0.17 296), transparent 70%), radial-gradient(70% 70% at 75% 70%, oklch(0.7 0.14 226), transparent 70%)",
+            filter: "blur(3px)",
+          }}
+        />
+        <span
+          className="absolute inset-x-0 top-0 h-px bg-white/60"
+          style={{ opacity: active ? 1 : 0 }}
+        />
+      </span>
+      <span
+        className={cn(
+          "text-[12px] font-medium transition-colors",
+          active ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        Liquid Glass
+      </span>
+      <span
+        className={cn(
+          "ml-auto pr-1 text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors",
+          active ? "text-(--accent-ink)" : "text-muted-foreground/70"
+        )}
+      >
+        {active ? "On" : "Off"}
+      </span>
+      {/* Sheen that sweeps the capsule when the pointer passes. */}
+      <span
+        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]"
+      />
+    </button>
+  );
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -197,10 +272,19 @@ export function SettingsDialog({
             <div className="w-44">
               <Segmented
                 options={THEME_OPTIONS}
-                value={settings.theme}
+                value={settings.theme === "light" ? "light" : "dark"}
                 onChange={(theme) => set({ theme })}
               />
             </div>
+          </Row>
+          <Row
+            label="Liquid Glass"
+            hint="iOS-style translucent chrome: frosted panels, refractive edges and a living backdrop."
+          >
+            <GlassSwitch
+              active={settings.theme === "glass"}
+              onChange={(on) => set({ theme: on ? "glass" : "dark" })}
+            />
           </Row>
           <Row label="Accent color" hint="The hue used for buttons, links and highlights.">
             <Swatches

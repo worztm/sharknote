@@ -11,7 +11,9 @@ import (
 // UI, and persists it back with UpdateSettings whenever the user changes
 // anything in the settings dialog.
 type Settings struct {
-	// Theme controls the overall color scheme: "dark" or "light".
+	// Theme controls the overall color scheme: "dark", "light" or "glass".
+	// "glass" is the Liquid Glass material: translucent, refractive chrome
+	// floating over a living backdrop.
 	Theme string `json:"theme"`
 	// Accent is the hue used across the whole UI: violet | sky | emerald |
 	// amber | rose. The frontend maps it to CSS oklch hue values.
@@ -59,7 +61,7 @@ func DefaultSettings() Settings {
 // never trusts them blindly.
 func (s Settings) sanitize() Settings {
 	d := DefaultSettings()
-	if !oneOf(s.Theme, "dark", "light") {
+	if !oneOf(s.Theme, "dark", "light", "glass") {
 		s.Theme = d.Theme
 	}
 	if !oneOf(s.Accent, "violet", "sky", "emerald", "amber", "rose") {
