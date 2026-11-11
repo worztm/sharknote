@@ -1,0 +1,94 @@
+name: Sharknote release
+
+# A push to main builds the Windows desktop app, signs the update manifest
+# with the offline Ed25519 key and publishes the site + the installer to
+# Cloudflare Pages. The installed app polls the published manifest, so a
+# version bump becomes an update offer on every user's machine.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sharknote-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install NSIS
+        run: choco install nsis --yes --no-progress
+
+      # Pinned to the exact wails3 build this app ships with, so CI
+      # produces the same kind of binary as the local machine.
+      - name: Install wails3
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.104
+
+      - name: Build desktop app and NSIS installer
+        run: wails3 task package
+
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Build website
+        working-directory: website
+        run: npm run build
+
+      # Copies the installer next to the site and writes latest.json,
+      # signed with the Ed25519 key the app verifies against.
+      - name: Prepare installer and sign the update manifest
+        working-directory: website
+        env:
+          SHARKNOTE_UPDATE_SIGN_KEY: ${{ secrets.SHARKNOTE_UPDATE_SIGN_KEY }}
+        run: node scripts/prepare-installer.mjs
+
+      # Fails the release if the manifest, the installer and the version the
+      # app reports do not agree - that mismatch would make an updated app
+      # offer the same update forever.
+      - name: Verify release
+        working-directory: website
+        run: node scripts/verify-release.mjs
+
+      - name: Install wrangler
+        run: npm i -g wrangler@4.158.0
+
+      # The wrangler login (an OAuth grant with pages:write) is restored from
+      # the secret. Wrangler refreshes the token on its own when it expires.
+      - name: Restore the Cloudflare login
+        shell: bash
+        run: |
+          mkdir -p ~/.wrangler/config
+          echo "${{ secrets.WRANGLER_AUTH }}" | base64 -d > ~/.wrangler/config/default.toml
+
+      - name: Publish to Cloudflare Pages
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: "false"
+        run: wrangler pages deploy dist --project-name=sharknote --branch=main
